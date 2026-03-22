@@ -23,6 +23,18 @@ export default function AppNavigator() {
       }
       setCheckingAuth(false);
     })();
+
+    const unsubscribe = authStore.subscribe((token) => {
+      setScreen((current) => {
+        if (!token) return 'login';
+        if (current === 'login') return 'dashboard';
+        return current;
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   if (checkingAuth) {

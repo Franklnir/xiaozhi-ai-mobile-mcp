@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,11 @@ import {
   RefreshControl,
   FlatList,
   Alert,
+  Animated,
+  Easing,
+  Platform,
 } from 'react-native';
-import { Colors, Spacing, Radius, FontSize } from '../theme/colors';
+import { Theme, useTheme } from '../theme/theme';
 import {
   apiGetModes,
   apiGetActiveMode,
@@ -30,6 +33,7 @@ interface DashboardScreenProps {
 }
 
 export default function DashboardScreen({ onLogout, onSettings }: DashboardScreenProps) {
+  const { theme } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [modes, setModes] = useState<ModeInfo[]>([]);
   const [activeMode, setActiveMode] = useState<ModeInfo | null>(null);
@@ -39,6 +43,42 @@ export default function DashboardScreen({ onLogout, onSettings }: DashboardScree
   const [activeThread, setActiveThread] = useState<number | null>(null);
   const [deviceId, setDeviceId] = useState('default');
   const [loadingMode, setLoadingMode] = useState<number | null>(null);
+
+  const enterAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(enterAnim, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [enterAnim]);
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const headerAnimStyle = {
+    opacity: enterAnim,
+    transform: [
+      {
+        translateY: enterAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-8, 0],
+        }),
+      },
+    ],
+  };
+
+  const contentAnimStyle = {
+    opacity: enterAnim,
+    transform: [
+      {
+        translateY: enterAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [12, 0],
+        }),
+      },
+    ],
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -104,7 +144,7 @@ export default function DashboardScreen({ onLogout, onSettings }: DashboardScree
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <Animated.View style={[styles.header, headerAnimStyle]}>
         <View>
           <Text style={styles.headerTitle}>SciG Mode</Text>
           <Text style={styles.headerSubtitle}>Device: {deviceId}</Text>
@@ -117,252 +157,324 @@ export default function DashboardScreen({ onLogout, onSettings }: DashboardScree
             <Text style={styles.headerBtnText}>↪️</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
 
       <ScrollView
         style={styles.scroll}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.accent} />
+        }
       >
-        {/* MCP Codes Status */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Koneksi MCP</Text>
-          {codes.length === 0 ? (
-            <Text style={styles.mutedText}>Belum ada code.</Text>
-          ) : (
-            codes.map((c, i) => (
-              <View key={i} style={styles.codeCard}>
-                <View style={styles.codeRow}>
-                  <Text style={styles.codeText}>{c.code}</Text>
-                  <View style={[styles.statusDot, c.is_connected ? styles.dotOnline : styles.dotOffline]} />
-                </View>
-                <Text style={styles.codeStatus}>
-                  {c.is_connected ? '🟢 Connected' : '🔴 Disconnected'}
-                </Text>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* Active Mode */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Mode Aktif</Text>
-          <View style={styles.activeModeCard}>
-            <Text style={styles.activeModeTitle}>{activeMode?.title || '-'}</Text>
-            <Text style={styles.activeModeName}>{activeMode?.name || '-'}</Text>
-          </View>
-        </View>
-
-        {/* Mode Selector */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pilih Mode</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {modes.map((m) => (
-              <TouchableOpacity
-                key={m.id}
-                style={[
-                  styles.modeChip,
-                  activeMode?.id === m.id && styles.modeChipActive,
-                ]}
-                onPress={() => selectMode(m.id)}
-                disabled={loadingMode !== null}
-              >
-                <Text
-                  style={[
-                    styles.modeChipText,
-                    activeMode?.id === m.id && styles.modeChipTextActive,
-                  ]}
-                >
-                  {loadingMode === m.id ? '⏳' : ''} {m.title}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Chat Threads */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Chat Threads</Text>
-          {threads.length === 0 ? (
-            <Text style={styles.mutedText}>Belum ada thread.</Text>
-          ) : (
-            threads.slice(0, 10).map((t) => (
-              <TouchableOpacity
-                key={t.id}
-                style={[
-                  styles.threadCard,
-                  activeThread === t.id && styles.threadCardActive,
-                ]}
-                onPress={() => selectThread(t.id)}
-              >
-                <Text style={styles.threadTitle}>{t.title || 'New Chat'}</Text>
-                <Text style={styles.threadMeta}>
-                  #{t.id} • {t.mode_title || t.mode_name || '-'}
-                </Text>
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
-
-        {/* Messages */}
-        {activeThread && (
+        <Animated.View style={contentAnimStyle}>
+          {/* MCP Codes Status */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Chat #{activeThread}</Text>
-            <View style={styles.chatArea}>
-              {messages.length === 0 ? (
-                <Text style={styles.mutedText}>Belum ada pesan.</Text>
-              ) : (
-                messages.map((m, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.msgRow,
-                      m.role === 'user' ? styles.msgUser : styles.msgAssistant,
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.msgBubble,
-                        m.role === 'user' ? styles.msgBubbleUser : styles.msgBubbleAssistant,
-                      ]}
-                    >
-                      <Text style={styles.msgLabel}>{m.role === 'user' ? 'User' : 'Xiaozhi'}</Text>
-                      <Text style={styles.msgContent}>{m.content}</Text>
-                      <Text style={styles.msgTime}>{m.created_at}</Text>
-                    </View>
+            <Text style={styles.sectionTitle}>Koneksi MCP</Text>
+            {codes.length === 0 ? (
+              <Text style={styles.mutedText}>Belum ada code.</Text>
+            ) : (
+              codes.map((c, i) => (
+                <View key={i} style={styles.codeCard}>
+                  <View style={styles.codeRow}>
+                    <Text style={styles.codeText}>{c.code}</Text>
+                    <View style={[styles.statusDot, c.is_connected ? styles.dotOnline : styles.dotOffline]} />
                   </View>
-                ))
-              )}
+                  <Text style={styles.codeStatus}>
+                    {c.is_connected ? '🟢 Connected' : '🔴 Disconnected'}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Active Mode */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Mode Aktif</Text>
+            <View style={styles.activeModeCard}>
+              <Text style={styles.activeModeTitle}>{activeMode?.title || '-'}</Text>
+              <Text style={styles.activeModeName}>{activeMode?.name || '-'}</Text>
             </View>
           </View>
-        )}
 
-        {/* Bottom spacing */}
-        <View style={{ height: 40 }} />
+          {/* Mode Selector */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Pilih Mode</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {modes.map((m) => (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[
+                    styles.modeChip,
+                    activeMode?.id === m.id && styles.modeChipActive,
+                  ]}
+                  onPress={() => selectMode(m.id)}
+                  disabled={loadingMode !== null}
+                >
+                  <Text
+                    style={[
+                      styles.modeChipText,
+                      activeMode?.id === m.id && styles.modeChipTextActive,
+                    ]}
+                  >
+                    {loadingMode === m.id ? '⏳' : ''} {m.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Chat Threads */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Chat Threads</Text>
+            {threads.length === 0 ? (
+              <Text style={styles.mutedText}>Belum ada thread.</Text>
+            ) : (
+              threads.slice(0, 10).map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  style={[
+                    styles.threadCard,
+                    activeThread === t.id && styles.threadCardActive,
+                  ]}
+                  onPress={() => selectThread(t.id)}
+                >
+                  <Text style={styles.threadTitle}>{t.title || 'New Chat'}</Text>
+                  <Text style={styles.threadMeta}>
+                    #{t.id} • {t.mode_title || t.mode_name || '-'}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+
+          {/* Messages */}
+          {activeThread && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Chat #{activeThread}</Text>
+              <View style={styles.chatArea}>
+                {messages.length === 0 ? (
+                  <Text style={styles.mutedText}>Belum ada pesan.</Text>
+                ) : (
+                  messages.map((m, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.msgRow,
+                        m.role === 'user' ? styles.msgUser : styles.msgAssistant,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.msgBubble,
+                          m.role === 'user' ? styles.msgBubbleUser : styles.msgBubbleAssistant,
+                        ]}
+                      >
+                        <Text style={styles.msgLabel}>{m.role === 'user' ? 'User' : 'Xiaozhi'}</Text>
+                        <Text style={styles.msgContent}>{m.content}</Text>
+                        <Text style={styles.msgTime}>{m.created_at}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Bottom spacing */}
+          <View style={{ height: 40 }} />
+        </Animated.View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    paddingTop: Spacing.xxl + 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.panelBorder,
-    backgroundColor: 'rgba(15,23,42,0.9)',
-  },
-  headerTitle: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.accentLight },
-  headerSubtitle: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2 },
-  headerButtons: { flexDirection: 'row', gap: Spacing.sm },
-  headerBtn: {
-    width: 40, height: 40,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoutBtn: { backgroundColor: 'rgba(239,68,68,0.15)' },
-  headerBtnText: { fontSize: 18 },
-  scroll: { flex: 1 },
-  section: { paddingHorizontal: Spacing.lg, marginTop: Spacing.xl },
-  sectionTitle: {
-    fontSize: FontSize.md,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: Spacing.md,
-  },
-  mutedText: { fontSize: FontSize.sm, color: Colors.textMuted },
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.bg },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      paddingTop: theme.spacing.xxl + 16,
+      borderBottomWidth: theme.isNeo ? 2 : 1,
+      borderBottomColor: theme.colors.panelBorder,
+      backgroundColor: theme.isNeo ? theme.colors.surface : theme.colors.surfaceLight,
+      ...theme.effects.cardShadow,
+    },
+    headerTitle: {
+      fontSize: theme.fontSize.xl,
+      fontWeight: '800',
+      color: theme.colors.accentLight,
+      fontFamily: theme.fonts.heading,
+    },
+    headerSubtitle: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+      fontFamily: theme.fonts.body,
+    },
+    headerButtons: { flexDirection: 'row', gap: theme.spacing.sm },
+    headerBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surfaceLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: theme.isNeo ? 2 : 0,
+      borderColor: theme.isNeo ? theme.colors.black : 'transparent',
+    },
+    logoutBtn: { backgroundColor: theme.isNeo ? '#fee2e2' : 'rgba(239,68,68,0.15)' },
+    headerBtnText: { fontSize: 18 },
+    scroll: { flex: 1 },
+    section: { paddingHorizontal: theme.spacing.lg, marginTop: theme.spacing.xl },
+    sectionTitle: {
+      fontSize: theme.fontSize.md,
+      fontWeight: '700',
+      color: theme.colors.text,
+      marginBottom: theme.spacing.md,
+      fontFamily: theme.fonts.heading,
+    },
+    mutedText: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, fontFamily: theme.fonts.body },
 
-  // MCP Codes
-  codeCard: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderWidth: 1,
-    borderColor: Colors.panelBorder,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  codeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  codeText: { fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: FontSize.sm, color: Colors.text },
-  statusDot: { width: 10, height: 10, borderRadius: 5 },
-  dotOnline: { backgroundColor: Colors.emerald },
-  dotOffline: { backgroundColor: Colors.red },
-  codeStatus: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 4 },
+    // MCP Codes
+    codeCard: {
+      backgroundColor: theme.isNeo ? theme.colors.panel : 'rgba(0,0,0,0.2)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+      ...theme.effects.cardShadow,
+    },
+    codeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    codeText: {
+      fontFamily: theme.fonts.mono,
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.text,
+    },
+    statusDot: { width: 10, height: 10, borderRadius: 5 },
+    dotOnline: { backgroundColor: theme.colors.emerald },
+    dotOffline: { backgroundColor: theme.colors.red },
+    codeStatus: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      marginTop: 4,
+      fontFamily: theme.fonts.body,
+    },
 
-  // Active mode
-  activeModeCard: {
-    backgroundColor: 'rgba(59,130,246,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(59,130,246,0.3)',
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-  },
-  activeModeTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.accentLight },
-  activeModeName: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 4 },
+    // Active mode
+    activeModeCard: {
+      backgroundColor: theme.isNeo ? theme.colors.surface : 'rgba(59,130,246,0.1)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.panelBorder : 'rgba(59,130,246,0.3)',
+      borderRadius: theme.radius.lg,
+      padding: theme.spacing.lg,
+      ...theme.effects.cardShadow,
+    },
+    activeModeTitle: {
+      fontSize: theme.fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.accentLight,
+      fontFamily: theme.fonts.heading,
+    },
+    activeModeName: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      marginTop: 4,
+      fontFamily: theme.fonts.body,
+    },
 
-  // Mode chips
-  modeChip: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderWidth: 1,
-    borderColor: Colors.panelBorder,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    marginRight: Spacing.sm,
-  },
-  modeChipActive: {
-    backgroundColor: 'rgba(59,130,246,0.2)',
-    borderColor: 'rgba(59,130,246,0.5)',
-  },
-  modeChipText: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  modeChipTextActive: { color: Colors.accentLight, fontWeight: '600' },
+    // Mode chips
+    modeChip: {
+      backgroundColor: theme.isNeo ? theme.colors.panel : 'rgba(0,0,0,0.25)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.full,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      marginRight: theme.spacing.sm,
+    },
+    modeChipActive: {
+      backgroundColor: theme.isNeo ? theme.colors.accentLight : 'rgba(59,130,246,0.2)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(59,130,246,0.5)',
+    },
+    modeChipText: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
+    modeChipTextActive: {
+      color: theme.isNeo ? theme.colors.black : theme.colors.accentLight,
+      fontWeight: '600',
+      fontFamily: theme.fonts.heading,
+    },
 
-  // Threads
-  threadCard: {
-    backgroundColor: 'rgba(0,0,0,0.15)',
-    borderWidth: 1,
-    borderColor: Colors.panelBorder,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-  threadCardActive: {
-    backgroundColor: 'rgba(59,130,246,0.15)',
-    borderColor: 'rgba(59,130,246,0.3)',
-  },
-  threadTitle: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
-  threadMeta: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 4 },
+    // Threads
+    threadCard: {
+      backgroundColor: theme.isNeo ? theme.colors.panel : 'rgba(0,0,0,0.15)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+      ...theme.effects.cardShadow,
+    },
+    threadCardActive: {
+      backgroundColor: theme.isNeo ? theme.colors.surfaceLight : 'rgba(59,130,246,0.15)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(59,130,246,0.3)',
+    },
+    threadTitle: {
+      fontSize: theme.fontSize.md,
+      fontWeight: '600',
+      color: theme.colors.text,
+      fontFamily: theme.fonts.heading,
+    },
+    threadMeta: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textMuted,
+      marginTop: 4,
+      fontFamily: theme.fonts.body,
+    },
 
-  // Chat messages
-  chatArea: {
-    backgroundColor: '#eef2f7',
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-  },
-  msgRow: { marginVertical: 6 },
-  msgUser: { alignItems: 'flex-end' },
-  msgAssistant: { alignItems: 'flex-start' },
-  msgBubble: {
-    maxWidth: '80%',
-    padding: Spacing.md,
-    borderRadius: Radius.lg,
-  },
-  msgBubbleUser: {
-    backgroundColor: '#d7f0ff',
-    borderBottomRightRadius: 4,
-  },
-  msgBubbleAssistant: {
-    backgroundColor: '#ffffff',
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  msgLabel: { fontSize: 11, fontWeight: '600', color: '#334155', marginBottom: 4 },
-  msgContent: { fontSize: FontSize.sm, color: '#1e293b' },
-  msgTime: { fontSize: 10, color: '#64748b', textAlign: 'right', marginTop: 6 },
-});
+    // Chat messages
+    chatArea: {
+      backgroundColor: theme.isNeo ? theme.colors.surface : theme.colors.surfaceLight,
+      borderRadius: theme.radius.lg,
+      padding: theme.spacing.md,
+      borderWidth: theme.isNeo ? 2 : 0,
+      borderColor: theme.isNeo ? theme.colors.panelBorder : 'transparent',
+    },
+    msgRow: { marginVertical: 6 },
+    msgUser: { alignItems: 'flex-end' },
+    msgAssistant: { alignItems: 'flex-start' },
+    msgBubble: {
+      maxWidth: '80%',
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.lg,
+    },
+    msgBubbleUser: {
+      backgroundColor: theme.isNeo ? '#bbf7d0' : '#d7f0ff',
+      borderBottomRightRadius: theme.radius.sm,
+      borderWidth: theme.isNeo ? 2 : 0,
+      borderColor: theme.isNeo ? theme.colors.black : 'transparent',
+    },
+    msgBubbleAssistant: {
+      backgroundColor: theme.isNeo ? theme.colors.panel : theme.colors.white,
+      borderBottomLeftRadius: theme.radius.sm,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.black : theme.colors.panelBorder,
+    },
+    msgLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      marginBottom: 4,
+      fontFamily: theme.fonts.body,
+    },
+    msgContent: { fontSize: theme.fontSize.sm, color: theme.colors.text, fontFamily: theme.fonts.body },
+    msgTime: {
+      fontSize: 10,
+      color: theme.colors.textMuted,
+      textAlign: 'right',
+      marginTop: 6,
+      fontFamily: theme.fonts.mono,
+    },
+  });

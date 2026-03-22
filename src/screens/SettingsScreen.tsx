@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,10 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Animated,
+  Easing,
 } from 'react-native';
-import { Colors, Spacing, Radius, FontSize } from '../theme/colors';
+import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
 import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig } from '../api/client';
 
@@ -17,11 +19,43 @@ interface SettingsScreenProps {
 }
 
 export default function SettingsScreen({ onBack }: SettingsScreenProps) {
+  const { theme, themeName, setThemeName } = useTheme();
   const [serverUrl, setServerUrl] = useState('');
   const [source, setSource] = useState('Indonesia');
   const [target, setTarget] = useState('Arab');
   const [languages, setLanguages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const enterAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(enterAnim, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [enterAnim]);
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const contentAnimStyle = {
+    opacity: enterAnim,
+    transform: [
+      {
+        translateY: enterAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [10, 0],
+        }),
+      },
+    ],
+  };
+
+  const themeOptions: { key: ThemeName; label: string }[] = [
+    { key: 'default', label: 'Default (Sistem)' },
+    { key: 'dark', label: 'Gelap' },
+    { key: 'light', label: 'Terang' },
+    { key: 'neo', label: 'Neo Brutalism' },
+  ];
 
   useEffect(() => {
     (async () => {
@@ -67,165 +101,234 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {/* Server URL */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Server URL</Text>
-          <Text style={styles.cardSubtitle}>Alamat backend SciG Mode MCP</Text>
-          <TextInput
-            style={styles.input}
-            value={serverUrl}
-            onChangeText={setServerUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            placeholder="http://192.168.1.100:8000"
-            placeholderTextColor={Colors.textMuted}
-          />
-          <TouchableOpacity style={styles.saveBtn} onPress={saveServerUrl}>
-            <Text style={styles.saveBtnText}>Simpan URL</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Language */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Bahasa Terjemahan</Text>
-          <Text style={styles.cardSubtitle}>
-            Atur bahasa sumber dan target untuk mode terjemahan
-          </Text>
-
-          <Text style={styles.label}>Bahasa Sumber</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-            {languages.map((lang) => (
-              <TouchableOpacity
-                key={lang}
-                style={[styles.langChip, source === lang && styles.langChipActive]}
-                onPress={() => setSource(lang)}
-              >
-                <Text style={[styles.langChipText, source === lang && styles.langChipTextActive]}>
-                  {lang}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={styles.label}>Bahasa Target</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-            {languages.map((lang) => (
-              <TouchableOpacity
-                key={lang}
-                style={[styles.langChip, target === lang && styles.langChipActive]}
-                onPress={() => setTarget(lang)}
-              >
-                <Text style={[styles.langChipText, target === lang && styles.langChipTextActive]}>
-                  {lang}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <TouchableOpacity
-            style={[styles.saveBtn, styles.saveBtnGreen]}
-            onPress={saveLanguage}
-            disabled={saving}
-          >
-            <Text style={styles.saveBtnText}>{saving ? 'Menyimpan...' : 'Simpan Bahasa'}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Info */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Informasi</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>App</Text>
-            <Text style={styles.infoValue}>SciG Mode MCP Mobile v1.0.0</Text>
+        <Animated.View style={contentAnimStyle}>
+          {/* Server URL */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Server URL</Text>
+            <Text style={styles.cardSubtitle}>Alamat backend SciG Mode MCP</Text>
+            <TextInput
+              style={styles.input}
+              value={serverUrl}
+              onChangeText={setServerUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="http://192.168.1.100:8000"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <TouchableOpacity style={styles.saveBtn} onPress={saveServerUrl}>
+              <Text style={styles.saveBtnText}>Simpan URL</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Backend</Text>
-            <Text style={styles.infoValue}>{serverUrl}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Platform</Text>
-            <Text style={styles.infoValue}>React Native</Text>
-          </View>
-        </View>
 
-        <View style={{ height: 40 }} />
+          {/* Theme */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Tema Tampilan</Text>
+            <Text style={styles.cardSubtitle}>Pilih mode gelap, terang, default, atau neo brutalism</Text>
+
+            <View style={styles.themeRow}>
+              {themeOptions.map((opt) => {
+                const active = themeName === opt.key;
+                return (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={[styles.themeChip, active && styles.themeChipActive]}
+                    onPress={() => setThemeName(opt.key)}
+                  >
+                    <Text style={[styles.themeChipText, active && styles.themeChipTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Language */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Bahasa Terjemahan</Text>
+            <Text style={styles.cardSubtitle}>
+              Atur bahasa sumber dan target untuk mode terjemahan
+            </Text>
+
+            <Text style={styles.label}>Bahasa Sumber</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {languages.map((lang) => (
+                <TouchableOpacity
+                  key={lang}
+                  style={[styles.langChip, source === lang && styles.langChipActive]}
+                  onPress={() => setSource(lang)}
+                >
+                  <Text style={[styles.langChipText, source === lang && styles.langChipTextActive]}>
+                    {lang}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.label}>Bahasa Target</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {languages.map((lang) => (
+                <TouchableOpacity
+                  key={lang}
+                  style={[styles.langChip, target === lang && styles.langChipActive]}
+                  onPress={() => setTarget(lang)}
+                >
+                  <Text style={[styles.langChipText, target === lang && styles.langChipTextActive]}>
+                    {lang}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.saveBtn, styles.saveBtnGreen]}
+              onPress={saveLanguage}
+              disabled={saving}
+            >
+              <Text style={styles.saveBtnText}>{saving ? 'Menyimpan...' : 'Simpan Bahasa'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Info */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Informasi</Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>App</Text>
+              <Text style={styles.infoValue}>SciG Mode MCP Mobile v1.0.0</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Backend</Text>
+              <Text style={styles.infoValue}>{serverUrl}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Platform</Text>
+              <Text style={styles.infoValue}>React Native</Text>
+            </View>
+          </View>
+
+          <View style={{ height: 40 }} />
+        </Animated.View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bg },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    paddingTop: Spacing.xxl + 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.panelBorder,
-    backgroundColor: 'rgba(15,23,42,0.9)',
-  },
-  backBtn: { padding: Spacing.sm },
-  backBtnText: { color: Colors.accentLight, fontSize: FontSize.sm, fontWeight: '600' },
-  headerTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
-  scroll: { flex: 1 },
-  scrollContent: { padding: Spacing.lg },
-  card: {
-    backgroundColor: Colors.panel,
-    borderWidth: 1,
-    borderColor: Colors.panelBorder,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  cardTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
-  cardSubtitle: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: 2, marginBottom: Spacing.md },
-  label: { fontSize: FontSize.xs, color: Colors.textSecondary, marginTop: Spacing.md, marginBottom: Spacing.sm },
-  input: {
-    backgroundColor: 'rgba(2,6,23,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    color: Colors.text,
-    fontSize: FontSize.md,
-  },
-  saveBtn: {
-    backgroundColor: Colors.accent,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-    marginTop: Spacing.lg,
-  },
-  saveBtnGreen: { backgroundColor: Colors.emeraldDark },
-  saveBtnText: { color: Colors.white, fontWeight: '700', fontSize: FontSize.md },
-  chipScroll: { flexDirection: 'row', marginBottom: Spacing.sm },
-  langChip: {
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderWidth: 1,
-    borderColor: Colors.panelBorder,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    marginRight: Spacing.sm,
-  },
-  langChipActive: {
-    backgroundColor: 'rgba(16,185,129,0.2)',
-    borderColor: 'rgba(16,185,129,0.5)',
-  },
-  langChipText: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  langChipTextActive: { color: Colors.emerald, fontWeight: '600' },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.panelBorder,
-  },
-  infoLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
-  infoValue: { fontSize: FontSize.sm, color: Colors.text },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.bg },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      paddingTop: theme.spacing.xxl + 16,
+      borderBottomWidth: theme.isNeo ? 2 : 1,
+      borderBottomColor: theme.colors.panelBorder,
+      backgroundColor: theme.isNeo ? theme.colors.surface : theme.colors.surfaceLight,
+      ...theme.effects.cardShadow,
+    },
+    backBtn: { padding: theme.spacing.sm },
+    backBtnText: {
+      color: theme.colors.accentLight,
+      fontSize: theme.fontSize.sm,
+      fontWeight: '600',
+      fontFamily: theme.fonts.body,
+    },
+    headerTitle: {
+      fontSize: theme.fontSize.lg,
+      fontWeight: '700',
+      color: theme.colors.text,
+      fontFamily: theme.fonts.heading,
+    },
+    scroll: { flex: 1 },
+    scrollContent: { padding: theme.spacing.lg },
+    card: {
+      backgroundColor: theme.colors.panel,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.lg,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
+      ...theme.effects.cardShadow,
+    },
+    cardTitle: { fontSize: theme.fontSize.md, fontWeight: '700', color: theme.colors.text, fontFamily: theme.fonts.heading },
+    cardSubtitle: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+      marginBottom: theme.spacing.md,
+      fontFamily: theme.fonts.body,
+    },
+    label: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      marginTop: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+      fontFamily: theme.fonts.body,
+    },
+    input: {
+      backgroundColor: theme.isNeo ? '#fff7ed' : theme.colors.surface,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      color: theme.colors.text,
+      fontSize: theme.fontSize.md,
+      fontFamily: theme.fonts.body,
+    },
+    saveBtn: {
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.radius.md,
+      paddingVertical: theme.spacing.md,
+      alignItems: 'center',
+      marginTop: theme.spacing.lg,
+      borderWidth: theme.isNeo ? 2 : 0,
+      borderColor: theme.isNeo ? theme.colors.black : 'transparent',
+      ...theme.effects.buttonShadow,
+    },
+    saveBtnGreen: { backgroundColor: theme.colors.emeraldDark },
+    saveBtnText: { color: theme.colors.white, fontWeight: '700', fontSize: theme.fontSize.md, fontFamily: theme.fonts.heading },
+    chipScroll: { flexDirection: 'row', marginBottom: theme.spacing.sm },
+    langChip: {
+      backgroundColor: theme.isNeo ? theme.colors.panel : 'rgba(0,0,0,0.25)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.full,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      marginRight: theme.spacing.sm,
+    },
+    langChipActive: {
+      backgroundColor: theme.isNeo ? theme.colors.accentLight : 'rgba(16,185,129,0.2)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(16,185,129,0.5)',
+    },
+    langChipText: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
+    langChipTextActive: { color: theme.isNeo ? theme.colors.black : theme.colors.emerald, fontWeight: '600', fontFamily: theme.fonts.heading },
+    themeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm },
+    themeChip: {
+      backgroundColor: theme.isNeo ? theme.colors.panel : 'rgba(0,0,0,0.25)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+    },
+    themeChipActive: {
+      backgroundColor: theme.isNeo ? theme.colors.accentLight : 'rgba(59,130,246,0.2)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(59,130,246,0.5)',
+    },
+    themeChipText: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
+    themeChipTextActive: { color: theme.isNeo ? theme.colors.black : theme.colors.accentLight, fontWeight: '700', fontFamily: theme.fonts.heading },
+    infoRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: theme.isNeo ? 2 : 1,
+      borderBottomColor: theme.colors.panelBorder,
+    },
+    infoLabel: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
+    infoValue: { fontSize: theme.fontSize.sm, color: theme.colors.text, fontFamily: theme.fonts.body },
+  });

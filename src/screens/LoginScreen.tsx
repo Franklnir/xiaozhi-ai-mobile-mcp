@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,11 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ScrollView,
+  Animated,
+  Easing,
 } from 'react-native';
-import { Colors, Spacing, Radius, FontSize } from '../theme/colors';
+import { Theme, useTheme } from '../theme/theme';
 import { apiLogin, apiRegister } from '../api/client';
 
 interface LoginScreenProps {
@@ -19,6 +20,7 @@ interface LoginScreenProps {
 }
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
+  const { theme } = useTheme();
   const [serverUrl, setServerUrl] = useState('http://192.168.1.100:8000');
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
@@ -29,6 +31,42 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const enterAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(enterAnim, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [enterAnim]);
+
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const logoAnimStyle = {
+    opacity: enterAnim,
+    transform: [
+      {
+        translateY: enterAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-12, 0],
+        }),
+      },
+    ],
+  };
+
+  const cardAnimStyle = {
+    opacity: enterAnim,
+    transform: [
+      {
+        translateY: enterAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [18, 0],
+        }),
+      },
+    ],
+  };
 
   function switchMode(nextIsRegister: boolean) {
     setIsRegister(nextIsRegister);
@@ -100,14 +138,14 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Logo area */}
-        <View style={styles.logoArea}>
+        <Animated.View style={[styles.logoArea, logoAnimStyle]}>
           <Text style={styles.logoIcon}>🤖</Text>
           <Text style={styles.logoTitle}>SciG Mode</Text>
           <Text style={styles.logoSubtitle}>Xiaozhi AI Controller</Text>
-        </View>
+        </Animated.View>
 
         {/* Login card */}
-        <View style={styles.card}>
+        <Animated.View style={[styles.card, cardAnimStyle]}>
           <Text style={styles.cardTitle}>{isRegister ? 'Register' : 'Login'}</Text>
           <Text style={styles.cardSubtitle}>
             {isRegister ? 'Buat akun baru SciG Mode MCP' : 'Masuk dengan akun SciG Mode MCP Anda'}
@@ -123,7 +161,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           <TextInput
             style={styles.input}
             placeholder="http://192.168.1.100:8000"
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={theme.colors.textMuted}
             value={serverUrl}
             onChangeText={setServerUrl}
             autoCapitalize="none"
@@ -135,7 +173,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           <TextInput
             style={styles.input}
             placeholder="username"
-            placeholderTextColor={Colors.textMuted}
+            placeholderTextColor={theme.colors.textMuted}
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
@@ -147,7 +185,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             <TextInput
               style={styles.passwordInput}
               placeholder="••••••"
-              placeholderTextColor={Colors.textMuted}
+              placeholderTextColor={theme.colors.textMuted}
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
@@ -168,7 +206,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 <TextInput
                   style={styles.passwordInput}
                   placeholder="••••••"
-                  placeholderTextColor={Colors.textMuted}
+                  placeholderTextColor={theme.colors.textMuted}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showConfirmPassword}
@@ -186,7 +224,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               <TextInput
                 style={styles.input}
                 placeholder="10 karakter"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={theme.colors.textMuted}
                 value={registerCode}
                 onChangeText={setRegisterCode}
                 autoCapitalize="characters"
@@ -202,7 +240,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             activeOpacity={0.8}
           >
             {loading ? (
-              <ActivityIndicator color={Colors.white} />
+              <ActivityIndicator color={theme.colors.white} />
             ) : (
               <Text style={styles.buttonText}>{isRegister ? 'Daftar' : 'Masuk'}</Text>
             )}
@@ -217,133 +255,148 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               {isRegister ? 'Masuk di sini' : 'Daftar di sini'}
             </Text>
           </Text>
-        </View>
+        </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.bg,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: Spacing.xl,
-  },
-  logoArea: {
-    alignItems: 'center',
-    marginBottom: Spacing.xxl,
-  },
-  logoIcon: {
-    fontSize: 56,
-    marginBottom: Spacing.sm,
-  },
-  logoTitle: {
-    fontSize: FontSize.xxl,
-    fontWeight: '800',
-    color: Colors.accentLight,
-  },
-  logoSubtitle: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginTop: Spacing.xs,
-  },
-  card: {
-    backgroundColor: Colors.panel,
-    borderWidth: 1,
-    borderColor: Colors.panelBorder,
-    borderRadius: Radius.xl,
-    padding: Spacing.xl,
-  },
-  cardTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-  },
-  cardSubtitle: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.lg,
-  },
-  errorBox: {
-    backgroundColor: 'rgba(239,68,68,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.3)',
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    marginBottom: Spacing.lg,
-  },
-  errorText: {
-    color: '#fca5a5',
-    fontSize: FontSize.sm,
-  },
-  label: {
-    fontSize: FontSize.xs,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.xs,
-    marginTop: Spacing.md,
-  },
-  input: {
-    backgroundColor: 'rgba(2,6,23,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    color: Colors.text,
-    fontSize: FontSize.md,
-  },
-  passwordRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(2,6,23,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-  },
-  passwordInput: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    color: Colors.text,
-    fontSize: FontSize.md,
-  },
-  eyeButton: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
-  },
-  eyeText: {
-    color: Colors.textSecondary,
-    fontSize: FontSize.md,
-  },
-  button: {
-    backgroundColor: Colors.accent,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.xl,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: Colors.white,
-    fontSize: FontSize.lg,
-    fontWeight: '700',
-  },
-  hint: {
-    textAlign: 'center',
-    fontSize: FontSize.xs,
-    color: Colors.textMuted,
-    marginTop: Spacing.lg,
-  },
-  hintLink: {
-    color: Colors.accentLight,
-    textDecorationLine: 'underline',
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.bg,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      padding: theme.spacing.xl,
+    },
+    logoArea: {
+      alignItems: 'center',
+      marginBottom: theme.spacing.xxl,
+    },
+    logoIcon: {
+      fontSize: 56,
+      marginBottom: theme.spacing.sm,
+    },
+    logoTitle: {
+      fontSize: theme.fontSize.xxl,
+      fontWeight: '800',
+      color: theme.colors.accentLight,
+      fontFamily: theme.fonts.heading,
+    },
+    logoSubtitle: {
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.textSecondary,
+      marginTop: theme.spacing.xs,
+      fontFamily: theme.fonts.body,
+    },
+    card: {
+      backgroundColor: theme.colors.panel,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.xl,
+      padding: theme.spacing.xl,
+      ...theme.effects.cardShadow,
+    },
+    cardTitle: {
+      fontSize: theme.fontSize.xl,
+      fontWeight: '700',
+      color: theme.colors.text,
+      marginBottom: theme.spacing.xs,
+      fontFamily: theme.fonts.heading,
+    },
+    cardSubtitle: {
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.textSecondary,
+      marginBottom: theme.spacing.lg,
+      fontFamily: theme.fonts.body,
+    },
+    errorBox: {
+      backgroundColor: theme.isNeo ? '#fee2e2' : 'rgba(239,68,68,0.1)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.redDark : 'rgba(239,68,68,0.3)',
+      borderRadius: theme.radius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.lg,
+    },
+    errorText: {
+      color: theme.isNeo ? theme.colors.redDark : '#fca5a5',
+      fontSize: theme.fontSize.sm,
+      fontFamily: theme.fonts.body,
+    },
+    label: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      marginBottom: theme.spacing.xs,
+      marginTop: theme.spacing.md,
+      fontFamily: theme.fonts.body,
+    },
+    input: {
+      backgroundColor: theme.isNeo ? '#fff7ed' : theme.colors.surface,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      color: theme.colors.text,
+      fontSize: theme.fontSize.md,
+      fontFamily: theme.fonts.body,
+    },
+    passwordRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.isNeo ? '#fff7ed' : theme.colors.surface,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.md,
+    },
+    passwordInput: {
+      flex: 1,
+      paddingVertical: theme.spacing.md,
+      color: theme.colors.text,
+      fontSize: theme.fontSize.md,
+      fontFamily: theme.fonts.body,
+    },
+    eyeButton: {
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: theme.spacing.sm,
+    },
+    eyeText: {
+      color: theme.colors.textSecondary,
+      fontSize: theme.fontSize.md,
+    },
+    button: {
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.radius.md,
+      paddingVertical: theme.spacing.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: theme.spacing.xl,
+      borderWidth: theme.isNeo ? 2 : 0,
+      borderColor: theme.isNeo ? theme.colors.black : 'transparent',
+      ...theme.effects.buttonShadow,
+    },
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+    buttonText: {
+      color: theme.colors.white,
+      fontSize: theme.fontSize.lg,
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
+    },
+    hint: {
+      textAlign: 'center',
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textMuted,
+      marginTop: theme.spacing.lg,
+      fontFamily: theme.fonts.body,
+    },
+    hintLink: {
+      color: theme.colors.accentLight,
+      textDecorationLine: 'underline',
+    },
+  });
