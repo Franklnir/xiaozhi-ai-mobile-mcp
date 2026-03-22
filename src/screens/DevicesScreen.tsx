@@ -35,6 +35,7 @@ export default function DevicesScreen() {
   const [manualToken, setManualToken] = useState('');
   const [manualAlias, setManualAlias] = useState('');
   const [trackingEnabled, setTrackingEnabled] = useState(false);
+  const [bootError, setBootError] = useState('');
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -58,17 +59,36 @@ export default function DevicesScreen() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     (async () => {
-      const reg = await registerDevice();
-      setDeviceId(reg.device_id);
-      setDeviceToken(reg.device_token);
-      const enabled = await deviceStore.isTrackingEnabled();
-      setTrackingEnabled(enabled);
-      if (enabled) {
-        startTracking().catch(() => {});
+      try {
+        setBootError('');
+        const reg = await registerDevice();
+        if (!active) return;
+        setDeviceId(reg.device_id);
+        setDeviceToken(reg.device_token);
+        const enabled = await deviceStore.isTrackingEnabled();
+        if (!active) return;
+        setTrackingEnabled(enabled);
+        if (enabled) {
+          try {
+            await startTracking();
+          } catch (e: any) {
+            if (active) {
+              setBootError(e?.message || 'Tracking belum aktif penuh. Lengkapi izin aplikasi.');
+            }
+          }
+        }
+        await loadDevices();
+      } catch (e: any) {
+        if (active) {
+          setBootError(e?.message || 'Gagal menyiapkan perangkat.');
+        }
       }
-      await loadDevices();
     })();
+    return () => {
+      active = false;
+    };
   }, [loadDevices]);
 
   useEffect(() => {
@@ -193,8 +213,15 @@ export default function DevicesScreen() {
         <Animated.View style={animStyle}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Perangkat Saya</Text>
-            <Text style={styles.headerSubtitle}>Update tiap 30 detik</Text>
+            <Text style={styles.headerSubtitle}>Update tiap 10 detik</Text>
           </View>
+
+          {bootError ? (
+            <View style={styles.warnCard}>
+              <Text style={styles.warnTitle}>Perlu Perhatian</Text>
+              <Text style={styles.warnText}>{bootError}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Perangkat Utama</Text>
@@ -318,6 +345,29 @@ const createStyles = (theme: Theme) =>
       fontSize: theme.fontSize.sm,
       color: theme.colors.textMuted,
       marginTop: 4,
+      fontFamily: theme.fonts.body,
+    },
+    warnCard: {
+      marginHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.isNeo ? '#fff7ed' : 'rgba(245, 158, 11, 0.12)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(245, 158, 11, 0.35)',
+      ...theme.effects.cardShadow,
+    },
+    warnTitle: {
+      color: theme.colors.text,
+      fontWeight: '800',
+      fontSize: theme.fontSize.sm,
+      fontFamily: theme.fonts.heading,
+    },
+    warnText: {
+      marginTop: 6,
+      color: theme.colors.textSecondary,
+      fontSize: theme.fontSize.sm,
+      lineHeight: 20,
       fontFamily: theme.fonts.body,
     },
     card: {

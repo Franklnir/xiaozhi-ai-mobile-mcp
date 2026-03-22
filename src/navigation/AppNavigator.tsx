@@ -11,6 +11,7 @@ import MessagesScreen from '../screens/MessagesScreen';
 import AccountScreen from '../screens/AccountScreen';
 import DeviceDetailScreen from '../screens/DeviceDetailScreen';
 import QrScannerScreen from '../screens/QrScannerScreen';
+import PermissionGateScreen from '../screens/PermissionGateScreen';
 import { authStore } from '../stores/authStore';
 import { useTheme } from '../theme/theme';
 
@@ -64,16 +65,19 @@ export default function AppNavigator() {
   const { theme } = useTheme();
   const [token, setToken] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [permissionsReady, setPermissionsReady] = useState(false);
 
   useEffect(() => {
     (async () => {
       const t = await authStore.getToken();
       setToken(t);
+      setPermissionsReady(false);
       setCheckingAuth(false);
     })();
 
     const unsub = authStore.subscribe((t) => {
       setToken(t);
+      setPermissionsReady(false);
     });
 
     return () => {
@@ -102,11 +106,17 @@ export default function AppNavigator() {
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {token ? (
-          <>
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="DeviceDetail" component={DeviceDetailScreen} />
-            <Stack.Screen name="QrScanner" component={QrScannerScreen} />
-          </>
+          permissionsReady ? (
+            <>
+              <Stack.Screen name="Main" component={MainTabs} />
+              <Stack.Screen name="DeviceDetail" component={DeviceDetailScreen} />
+              <Stack.Screen name="QrScanner" component={QrScannerScreen} />
+            </>
+          ) : (
+            <Stack.Screen name="PermissionGate">
+              {() => <PermissionGateScreen onReady={() => setPermissionsReady(true)} />}
+            </Stack.Screen>
+          )
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />
         )}

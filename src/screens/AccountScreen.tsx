@@ -14,6 +14,7 @@ import {
 import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
 import { deviceStore } from '../stores/deviceStore';
+import { stopTracking } from '../services/deviceService';
 import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig, apiGetPublicSettings, SocialLink } from '../api/client';
 import { SERVER_URL_PLACEHOLDER } from '../utils/serverUrl';
 
@@ -98,6 +99,7 @@ export default function AccountScreen() {
   }
 
   async function handleLogout() {
+    await stopTracking().catch(() => {});
     await authStore.clear();
     await deviceStore.clear();
   }
