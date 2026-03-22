@@ -1,4 +1,6 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.scigmodemcp">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.scigmodemcp">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -33,5 +35,12 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+      <service
+        android:name="com.asterinet.react.bgactions.RNBackgroundActionsTask"
+        android:enabled="true"
+        android:exported="false"
+        android:foregroundServiceType="location"
+        android:stopWithTask="false"
+        tools:node="merge" />
     </application>
 </manifest>

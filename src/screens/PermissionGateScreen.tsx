@@ -35,9 +35,10 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
   const styles = useMemo(() => createStyles(theme), [theme]);
   const enterAnim = useRef(new Animated.Value(0)).current;
   const mountedRef = useRef(true);
+  const setupInFlightRef = useRef(false);
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<TrackingPermissionSummary | null>(null);
-  const [message, setMessage] = useState('Menyiapkan izin lokasi, notifikasi, dan tracking latar belakang...');
+  const [message, setMessage] = useState('Menyiapkan izin lokasi, notifikasi, dan sinkronisasi perangkat...');
 
   useEffect(() => {
     Animated.timing(enterAnim, {
@@ -49,14 +50,18 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
   }, [enterAnim]);
 
   const runSetup = useCallback(async () => {
+    if (setupInFlightRef.current) {
+      return;
+    }
+    setupInFlightRef.current = true;
     setLoading(true);
-    setMessage('Meminta izin lokasi, background, dan notifikasi...');
+    setMessage('Meminta izin lokasi, background, dan notifikasi dengan aman...');
     try {
       const result = await bootstrapTrackingAfterLogin();
       if (!mountedRef.current) return;
       setSummary(result);
       if (result.ready) {
-        setMessage('Izin lengkap. Masuk ke aplikasi...');
+        setMessage('Izin lengkap. Menyiapkan aplikasi...');
         onReady?.();
         return;
       }
@@ -69,6 +74,7 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
       if (mountedRef.current) {
         setLoading(false);
       }
+      setupInFlightRef.current = false;
     }
   }, [onReady]);
 
@@ -111,7 +117,7 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
       <Animated.View style={[styles.card, animStyle]}>
         <Text style={styles.title}>Aktifkan Izin Perangkat</Text>
         <Text style={styles.subtitle}>
-          Setelah login, izin lokasi, background location, dan notifikasi wajib aktif supaya aplikasi tetap jalan di latar belakang.
+          Setelah login, izin lokasi, background location, dan notifikasi wajib aktif supaya aplikasi tetap stabil dan tracking bisa berjalan di latar belakang.
         </Text>
 
         <View style={styles.statusBox}>

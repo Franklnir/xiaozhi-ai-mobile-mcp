@@ -8,6 +8,7 @@ import { deviceStore } from '../stores/deviceStore';
 
 const sleep = (time: number) => new Promise((resolve) => setTimeout(resolve, time));
 export const TRACKING_INTERVAL_MS = 10000;
+let trackingStartPromise: Promise<void> | null = null;
 
 type AndroidPermission = Parameters<typeof PermissionsAndroid.check>[0];
 
@@ -280,20 +281,40 @@ const trackingTask = async () => {
 };
 
 export async function startTracking(options: { skipPermissionCheck?: boolean } = {}) {
-  if (!options.skipPermissionCheck) {
-    const summary = await requestTrackingPermissions();
-    if (!summary.ready) {
-      throw new Error(buildPermissionError(summary));
+  if (trackingStartPromise) {
+    return trackingStartPromise;
+  }
+
+  trackingStartPromise = (async () => {
+    if (!options.skipPermissionCheck) {
+      const summary = await requestTrackingPermissions();
+      if (!summary.ready) {
+        throw new Error(buildPermissionError(summary));
+      }
     }
-  }
-  if (!BackgroundService.isRunning()) {
-    await BackgroundService.start(trackingTask, trackingOptions);
-  }
-  await deviceStore.setTrackingEnabled(true);
+
+    try {
+      if (!BackgroundService.isRunning()) {
+        await BackgroundService.start(trackingTask, trackingOptions);
+      }
+    } catch {
+      throw new Error(
+        'Tracking latar belakang belum bisa dinyalakan. Pastikan izin lokasi, notifikasi, dan baterai tidak dibatasi.',
+      );
+    }
+
+    await deviceStore.setTrackingEnabled(true);
+    try {
+      await sendHeartbeat();
+    } catch {
+      // keep service running even if first sync fails
+    }
+  })();
+
   try {
-    await sendHeartbeat();
-  } catch {
-    // keep service running even if first sync fails
+    await trackingStartPromise;
+  } finally {
+    trackingStartPromise = null;
   }
 }
 
@@ -315,6 +336,26 @@ export async function bootstrapTrackingAfterLogin(): Promise<TrackingPermissionS
   }
 
   await registerDevice();
-  await startTracking({ skipPermissionCheck: true });
+  await deviceStore.setTrackingEnabled(true);
+  try {
+    await sendHeartbeat();
+  } catch {
+    // allow app to continue even if backend has not replied yet
+  }
   return summary;
+}
+
+export async function resumeTrackingIfEnabled() {
+  const enabled = await deviceStore.isTrackingEnabled();
+  if (!enabled) {
+    return false;
+  }
+
+  const summary = await getTrackingPermissionSummary();
+  if (!summary.ready) {
+    return false;
+  }
+
+  await startTracking({ skipPermissionCheck: true });
+  return true;
 }
