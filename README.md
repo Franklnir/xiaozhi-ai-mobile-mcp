@@ -77,10 +77,30 @@ cd android
 
 APK output di: `android/app/build/outputs/apk/release/app-release.apk`
 
+## Release Signing Production
+
+Release build production sebaiknya memakai keystore sendiri, bukan debug keystore.
+
+Gradle akan otomatis memakai env berikut bila tersedia:
+
+```bash
+export SCIG_UPLOAD_STORE_FILE=/absolute/path/to/your-release.keystore
+export SCIG_UPLOAD_STORE_PASSWORD=your_store_password
+export SCIG_UPLOAD_KEY_ALIAS=your_key_alias
+export SCIG_UPLOAD_KEY_PASSWORD=your_key_password
+```
+
+Workflow GitHub Actions juga mendukung secret berikut:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
 Upload ke GitHub releases: https://github.com/Franklnir/xiaozhi-ai-mobile-mcp/releases
 
 ## Catatan
 
-- **Server URL**: Wajib diisi di Login screen. Gunakan IP lokal (bukan `localhost`) saat testing di device fisik.
+- **Server URL**: Untuk production gunakan `https://your-domain.example`. HTTP hanya aman untuk testing localhost/LAN.
 - **CORS**: Backend sudah dikonfigurasi dengan CORS middleware yang mendukung cross-origin requests.
 - **HTTPS**: Untuk produksi, gunakan HTTPS. Self-signed certificate tidak akan bekerja di Android tanpa konfigurasi tambahan.

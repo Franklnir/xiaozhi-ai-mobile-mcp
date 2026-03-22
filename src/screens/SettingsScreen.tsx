@@ -13,6 +13,7 @@ import {
 import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
 import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig } from '../api/client';
+import { SERVER_URL_PLACEHOLDER } from '../utils/serverUrl';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -74,8 +75,12 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   }, []);
 
   async function saveServerUrl() {
-    await authStore.setServerUrl(serverUrl.trim());
-    Alert.alert('Tersimpan', 'Server URL berhasil disimpan. Restart app untuk efek penuh.');
+    try {
+      await authStore.setServerUrl(serverUrl.trim());
+      Alert.alert('Tersimpan', 'Server URL berhasil disimpan.');
+    } catch (e: any) {
+      Alert.alert('URL tidak valid', e.message || 'Server URL tidak valid.');
+    }
   }
 
   async function saveLanguage() {
@@ -113,7 +118,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
-              placeholder="http://192.168.1.100:8000"
+              placeholder={SERVER_URL_PLACEHOLDER}
               placeholderTextColor={theme.colors.textMuted}
             />
             <TouchableOpacity style={styles.saveBtn} onPress={saveServerUrl}>

@@ -1,19 +1,27 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { authStore } from '../stores/authStore';
+import { validateServerUrl } from '../utils/serverUrl';
 
 let apiClient: AxiosInstance | null = null;
+let apiBaseURL = '';
 
 /**
  * Initialize or re-initialize the API client with the given server URL.
  */
 export async function initApiClient(): Promise<AxiosInstance> {
   const baseURL = await authStore.getServerUrl();
+  if (!baseURL) {
+    throw new Error('Server URL belum diatur.');
+  }
+  apiBaseURL = baseURL;
 
   apiClient = axios.create({
     baseURL,
     timeout: 15000,
     headers: {
       'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-Client': 'mobile',
     },
     withCredentials: true,
   });
@@ -22,8 +30,11 @@ export async function initApiClient(): Promise<AxiosInstance> {
   apiClient.interceptors.request.use(
     async (config: InternalAxiosRequestConfig) => {
       const token = await authStore.getToken();
-      if (token && config.headers) {
-        config.headers.Cookie = `access_token=${token}`;
+      if (config.headers) {
+        config.headers['X-Client'] = 'mobile';
+        if (token) {
+          config.headers.Cookie = `access_token=${token}`;
+        }
       }
       return config;
     },
@@ -48,7 +59,8 @@ export async function initApiClient(): Promise<AxiosInstance> {
  * Get the current API client instance. Initializes if needed.
  */
 export async function getApi(): Promise<AxiosInstance> {
-  if (!apiClient) {
+  const baseURL = await authStore.getServerUrl();
+  if (!apiClient || apiBaseURL !== baseURL) {
     return initApiClient();
   }
   return apiClient;
@@ -84,14 +96,15 @@ export async function apiLogin(
   password: string,
 ): Promise<LoginResult> {
   try {
+    const normalizedServerUrl = validateServerUrl(serverUrl);
     // Save server URL for future API calls
-    await authStore.setServerUrl(serverUrl);
+    await authStore.setServerUrl(normalizedServerUrl);
 
     const formData = new URLSearchParams();
     formData.append('username', username);
     formData.append('password', password);
 
-    const response = await axios.post(`${serverUrl}/login`, formData.toString(), {
+    const response = await axios.post(`${normalizedServerUrl}/login`, formData.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
@@ -147,7 +160,8 @@ export async function apiRegister(
   code?: string,
 ): Promise<RegisterResult> {
   try {
-    await authStore.setServerUrl(serverUrl);
+    const normalizedServerUrl = validateServerUrl(serverUrl);
+    await authStore.setServerUrl(normalizedServerUrl);
 
     const formData = new URLSearchParams();
     formData.append('username', username);
@@ -157,7 +171,7 @@ export async function apiRegister(
       formData.append('code', code);
     }
 
-    const response = await axios.post(`${serverUrl}/register`, formData.toString(), {
+    const response = await axios.post(`${normalizedServerUrl}/register`, formData.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
@@ -203,7 +217,8 @@ export async function apiRegister(
 }
 
 export async function apiGetPublicSettings(serverUrl?: string): Promise<PublicSettings> {
-  const baseURL = serverUrl || (await authStore.getServerUrl());
+  const saved = await authStore.getServerUrl();
+  const baseURL = validateServerUrl(serverUrl || saved);
   const res = await axios.get(`${baseURL}/api/public/settings`, { timeout: 10000 });
   return res.data;
 }

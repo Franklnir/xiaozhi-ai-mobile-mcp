@@ -102,7 +102,7 @@ export default function ModeEditorScreen() {
   useEffect(() => {
     const timer = setInterval(() => {
       updatePreview().catch(() => {});
-    }, 30000);
+    }, 10000);
     return () => clearInterval(timer);
   }, [name, title, intro, source, target, deviceId]);
 

@@ -15,6 +15,7 @@ import {
 import { Theme, useTheme } from '../theme/theme';
 import { apiGetPublicSettings, apiLogin, apiRegister } from '../api/client';
 import { authStore } from '../stores/authStore';
+import { SERVER_URL_PLACEHOLDER } from '../utils/serverUrl';
 
 interface LoginScreenProps {
   onLoginSuccess?: () => void;
@@ -93,7 +94,7 @@ const TEXT: Record<LangKey, Record<string, string>> = {
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const { theme } = useTheme();
-  const [serverUrl, setServerUrl] = useState('http://192.168.1.100:8000');
+  const [serverUrl, setServerUrl] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const [language, setLanguage] = useState<LangKey>('id');
   const [registerRequiresCode, setRegisterRequiresCode] = useState(true);
@@ -115,8 +116,11 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         setLanguage(savedLang);
       }
       try {
-        const settings = await apiGetPublicSettings(saved || serverUrl);
-        setRegisterRequiresCode(settings.register_requires_code !== false);
+        const initialUrl = saved || serverUrl;
+        if (initialUrl) {
+          const settings = await apiGetPublicSettings(initialUrl);
+          setRegisterRequiresCode(settings.register_requires_code !== false);
+        }
       } catch {
         // ignore
       }
@@ -286,7 +290,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           <Text style={styles.label}>{t('serverUrl')}</Text>
           <TextInput
             style={styles.input}
-            placeholder="http://192.168.1.100:8000"
+            placeholder={SERVER_URL_PLACEHOLDER}
             placeholderTextColor={theme.colors.textMuted}
             value={serverUrl}
             onChangeText={setServerUrl}

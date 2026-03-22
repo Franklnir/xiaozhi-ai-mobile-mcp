@@ -78,7 +78,7 @@ export default function DevicesScreen() {
   useEffect(() => {
     const timer = setInterval(() => {
       loadDevices().catch(() => {});
-    }, 30000);
+    }, 10000);
     return () => clearInterval(timer);
   }, [loadDevices]);
 

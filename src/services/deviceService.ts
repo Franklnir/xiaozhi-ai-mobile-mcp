@@ -7,6 +7,7 @@ import { apiDeviceHeartbeat, apiRegisterDevice } from '../api/client';
 import { deviceStore } from '../stores/deviceStore';
 
 const sleep = (time: number) => new Promise((resolve) => setTimeout(resolve, time));
+const TRACKING_INTERVAL_MS = 10000;
 
 async function ensureLocationPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
@@ -135,7 +136,7 @@ export async function sendHeartbeat() {
 const trackingOptions = {
   taskName: 'SciG Tracking',
   taskTitle: 'SciG Mode Tracking Aktif',
-  taskDesc: 'Mengirim lokasi & status perangkat tiap 30 detik',
+  taskDesc: 'Mengirim lokasi & status perangkat tiap 10 detik',
   taskIcon: {
     name: 'ic_launcher',
     type: 'mipmap',
@@ -151,7 +152,7 @@ const trackingTask = async () => {
     } catch {
       // ignore errors to keep service running
     }
-    await sleep(30000);
+    await sleep(TRACKING_INTERVAL_MS);
   }
 };
 

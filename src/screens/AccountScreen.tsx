@@ -15,6 +15,7 @@ import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
 import { deviceStore } from '../stores/deviceStore';
 import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig, apiGetPublicSettings, SocialLink } from '../api/client';
+import { SERVER_URL_PLACEHOLDER } from '../utils/serverUrl';
 
 export default function AccountScreen() {
   const { theme, themeName, setThemeName } = useTheme();
@@ -66,8 +67,10 @@ export default function AccountScreen() {
         const settings = await apiGetDeviceSettings('default');
         setSource(settings.source || 'Indonesia');
         setTarget(settings.target || 'Arab');
-        const pub = await apiGetPublicSettings(url);
-        setSocialLinks(pub.social_links || []);
+        if (url) {
+          const pub = await apiGetPublicSettings(url);
+          setSocialLinks(pub.social_links || []);
+        }
       } catch (e) {
         // ignore
       }
@@ -75,8 +78,12 @@ export default function AccountScreen() {
   }, []);
 
   async function saveServerUrl() {
-    await authStore.setServerUrl(serverUrl.trim());
-    Alert.alert('Tersimpan', 'Server URL berhasil disimpan.');
+    try {
+      await authStore.setServerUrl(serverUrl.trim());
+      Alert.alert('Tersimpan', 'Server URL berhasil disimpan.');
+    } catch (e: any) {
+      Alert.alert('URL tidak valid', e.message || 'Server URL tidak valid.');
+    }
   }
 
   async function saveLanguage() {
@@ -114,7 +121,7 @@ export default function AccountScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
-              placeholder="http://192.168.1.100:8000"
+              placeholder={SERVER_URL_PLACEHOLDER}
               placeholderTextColor={theme.colors.textMuted}
             />
             <TouchableOpacity style={styles.saveBtn} onPress={saveServerUrl}>
