@@ -144,7 +144,7 @@ export async function apiRegister(
   username: string,
   password: string,
   confirmPassword: string,
-  code: string,
+  code?: string,
 ): Promise<RegisterResult> {
   try {
     await authStore.setServerUrl(serverUrl);
@@ -153,7 +153,9 @@ export async function apiRegister(
     formData.append('username', username);
     formData.append('password', password);
     formData.append('confirm_password', confirmPassword);
-    formData.append('code', code);
+    if (typeof code === 'string') {
+      formData.append('code', code);
+    }
 
     const response = await axios.post(`${serverUrl}/register`, formData.toString(), {
       headers: {
@@ -200,6 +202,12 @@ export async function apiRegister(
   }
 }
 
+export async function apiGetPublicSettings(serverUrl?: string): Promise<PublicSettings> {
+  const baseURL = serverUrl || (await authStore.getServerUrl());
+  const res = await axios.get(`${baseURL}/api/public/settings`, { timeout: 10000 });
+  return res.data;
+}
+
 export interface ModeInfo {
   id: number;
   name: string;
@@ -242,9 +250,24 @@ export interface DeviceRegisterResult {
 }
 
 export interface McpCodeInfo {
+  id: number;
   code: string;
-  is_connected: boolean;
+  has_token?: number;
+  is_connected?: number;
+  created_at?: string;
+  last_ok_at?: string;
+  last_err_at?: string;
   last_error?: string;
+}
+
+export interface SocialLink {
+  label: string;
+  url: string;
+}
+
+export interface PublicSettings {
+  register_requires_code: boolean;
+  social_links: SocialLink[];
 }
 
 export interface ThreadInfo {
@@ -309,6 +332,30 @@ export async function apiSetActiveMode(deviceId: string, modeId: number) {
 export async function apiGetMyCodes(): Promise<McpCodeInfo[]> {
   const api = await getApi();
   const res = await api.get('/api/mcp/my-codes');
+  return res.data;
+}
+
+export async function apiTestMcpToken(token: string): Promise<{ ok: boolean; error?: string }> {
+  const api = await getApi();
+  const res = await api.post('/api/mcp/test-token', { token });
+  return res.data;
+}
+
+export async function apiCreateMyMcpToken(token: string) {
+  const api = await getApi();
+  const res = await api.post('/api/mcp/my-codes/create', { token });
+  return res.data;
+}
+
+export async function apiUpdateMyMcpToken(codeId: number, token: string) {
+  const api = await getApi();
+  const res = await api.post('/api/mcp/my-codes/update', { code_id: codeId, token });
+  return res.data;
+}
+
+export async function apiClearMyMcpToken(codeId: number) {
+  const api = await getApi();
+  const res = await api.post('/api/mcp/my-codes/clear', { code_id: codeId });
   return res.data;
 }
 

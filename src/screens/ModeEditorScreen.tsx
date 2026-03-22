@@ -18,7 +18,13 @@ import {
   apiGetDeviceSettings,
   apiGetLastDevice,
   apiSetActiveMode,
+  apiGetMyCodes,
+  apiTestMcpToken,
+  apiCreateMyMcpToken,
+  apiUpdateMyMcpToken,
+  apiClearMyMcpToken,
   ModeInfo,
+  McpCodeInfo,
 } from '../api/client';
 import { deviceStore } from '../stores/deviceStore';
 import { registerDevice } from '../services/deviceService';
@@ -34,6 +40,12 @@ export default function ModeEditorScreen() {
   const [source, setSource] = useState('Indonesia');
   const [target, setTarget] = useState('Arab');
   const [deviceId, setDeviceId] = useState('');
+  const [mcpCodes, setMcpCodes] = useState<McpCodeInfo[]>([]);
+  const [activeCodeId, setActiveCodeId] = useState<number | null>(null);
+  const [tokenInput, setTokenInput] = useState('');
+  const [tokenTest, setTokenTest] = useState<{ status: 'idle' | 'testing' | 'ok' | 'error'; message?: string }>({
+    status: 'idle',
+  });
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -55,6 +67,18 @@ export default function ModeEditorScreen() {
     }
   }, [selectedMode]);
 
+  const loadCodes = useCallback(async () => {
+    try {
+      const list = await apiGetMyCodes();
+      setMcpCodes(list || []);
+      if (!activeCodeId && list && list.length) {
+        setActiveCodeId(list[0].id);
+      }
+    } catch {
+      setMcpCodes([]);
+    }
+  }, [activeCodeId]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -71,8 +95,9 @@ export default function ModeEditorScreen() {
       }
       setDeviceId(did);
       loadModes().catch(() => {});
+      loadCodes().catch(() => {});
     })();
-  }, [loadModes]);
+  }, [loadModes, loadCodes]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -94,6 +119,62 @@ export default function ModeEditorScreen() {
   async function updatePreview() {
     const res = await apiRenderPrompt(selectedMode?.id || null, { source, target }, deviceId || undefined);
     setPreview(res.prompt || '');
+  }
+
+  const activeCode = mcpCodes.find((c) => c.id === activeCodeId) || null;
+
+  async function testToken() {
+    if (!tokenInput.trim()) {
+      Alert.alert('Token kosong', 'Masukkan token/WS URL terlebih dulu.');
+      return;
+    }
+    setTokenTest({ status: 'testing' });
+    try {
+      const res = await apiTestMcpToken(tokenInput.trim());
+      if (res.ok) {
+        setTokenTest({ status: 'ok', message: 'Connected' });
+      } else {
+        setTokenTest({ status: 'error', message: res.error || 'Gagal konek' });
+      }
+    } catch (e: any) {
+      setTokenTest({ status: 'error', message: e.message || 'Gagal konek' });
+    }
+  }
+
+  async function saveToken() {
+    if (tokenTest.status !== 'ok') {
+      Alert.alert('Test dulu', 'Silakan test koneksi sebelum simpan.');
+      return;
+    }
+    try {
+      if (activeCodeId) {
+        await apiUpdateMyMcpToken(activeCodeId, tokenInput.trim());
+        Alert.alert('Tersimpan', 'Token berhasil diperbarui.');
+      } else {
+        const created = await apiCreateMyMcpToken(tokenInput.trim());
+        Alert.alert('Tersimpan', `Code baru dibuat: ${created.code}`);
+      }
+      setTokenInput('');
+      setTokenTest({ status: 'idle' });
+      loadCodes().catch(() => {});
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Gagal simpan token');
+    }
+  }
+
+  async function clearToken() {
+    if (!activeCodeId) {
+      Alert.alert('Tidak ada code', 'Belum ada code untuk dihapus.');
+      return;
+    }
+    try {
+      await apiClearMyMcpToken(activeCodeId);
+      Alert.alert('OK', 'Token dihapus.');
+      setTokenTest({ status: 'idle' });
+      loadCodes().catch(() => {});
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Gagal hapus token');
+    }
   }
 
   async function saveMode() {
@@ -135,6 +216,80 @@ export default function ModeEditorScreen() {
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Mode Editor</Text>
             <Text style={styles.headerSubtitle}>Edit prompt & preview real-time</Text>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Token MCP (User)</Text>
+            <Text style={styles.cardSubtitle}>Satu token hanya untuk satu akun. Test koneksi dulu sebelum simpan.</Text>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+              {mcpCodes.length === 0 ? (
+                <Text style={styles.mutedText}>Belum ada code. Simpan token untuk membuat code baru.</Text>
+              ) : (
+                mcpCodes.map((c) => {
+                  const active = c.id === activeCodeId;
+                  const connected = !!c.is_connected;
+                  return (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[styles.codeChip, active && styles.codeChipActive]}
+                      onPress={() => setActiveCodeId(c.id)}
+                    >
+                      <Text style={[styles.codeChipText, active && styles.codeChipTextActive]}>
+                        {c.code}
+                      </Text>
+                      <Text style={styles.codeChipSub}>
+                        {connected ? 'Connected' : 'Offline'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            {activeCode ? (
+              <Text style={styles.mutedText}>
+                Status: {activeCode.is_connected ? 'Connected' : 'Not connected'}
+                {activeCode.last_err_at ? ` • last_err ${activeCode.last_err_at}` : ''}
+              </Text>
+            ) : null}
+
+            <TextInput
+              style={[styles.input, { marginTop: 12 }]}
+              value={tokenInput}
+              onChangeText={(v) => {
+                setTokenInput(v);
+                setTokenTest({ status: 'idle' });
+              }}
+              placeholder="wss://api.xiaozhi.me/mcp/?token=..."
+              placeholderTextColor={theme.colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <View style={styles.statusRow}>
+              <Text style={styles.statusLabel}>
+                {tokenTest.status === 'testing'
+                  ? 'Testing...'
+                  : tokenTest.status === 'ok'
+                  ? 'Connected'
+                  : tokenTest.status === 'error'
+                  ? `Error: ${tokenTest.message || ''}`
+                  : 'Belum dites'}
+              </Text>
+            </View>
+
+            <View style={styles.btnRow}>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={testToken}>
+                <Text style={styles.btnText}>Test Connect</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.primaryBtn} onPress={saveToken}>
+                <Text style={styles.btnText}>Simpan Token</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dangerBtn} onPress={clearToken}>
+                <Text style={styles.btnText}>Hapus Token</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.card}>
@@ -226,6 +381,50 @@ const createStyles = (theme: Theme) =>
       fontFamily: theme.fonts.body,
       marginBottom: 8,
     },
+    cardSubtitle: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      marginBottom: 10,
+      fontFamily: theme.fonts.body,
+    },
+    chipScroll: {
+      marginBottom: theme.spacing.sm,
+    },
+    mutedText: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textMuted,
+      fontFamily: theme.fonts.body,
+      marginTop: 6,
+    },
+    codeChip: {
+      backgroundColor: theme.colors.surfaceLight,
+      borderRadius: theme.radius.full,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      marginRight: theme.spacing.sm,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      alignItems: 'center',
+    },
+    codeChipActive: {
+      backgroundColor: theme.colors.accentLight,
+      borderColor: theme.colors.black,
+    },
+    codeChipText: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      fontFamily: theme.fonts.body,
+    },
+    codeChipTextActive: {
+      color: theme.colors.black,
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
+    },
+    codeChipSub: {
+      fontSize: 10,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+    },
     input: {
       backgroundColor: theme.colors.surfaceLight,
       borderRadius: theme.radius.md,
@@ -261,9 +460,32 @@ const createStyles = (theme: Theme) =>
       borderWidth: theme.isNeo ? 2 : 1,
       borderColor: theme.colors.panelBorder,
     },
+    dangerBtn: {
+      flex: 1,
+      backgroundColor: theme.colors.red,
+      paddingVertical: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.black : theme.colors.redDark,
+    },
     btnText: {
       color: theme.colors.white,
       fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
+    statusRow: {
+      marginTop: theme.spacing.sm,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surfaceLight,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+    },
+    statusLabel: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
       fontFamily: theme.fonts.body,
     },
     preview: {

@@ -63,12 +63,7 @@ async function collectDeviceStatus() {
       NetInfo.fetch(),
     ]);
 
-  let batteryTemp: number | undefined;
-  try {
-    batteryTemp = await DeviceInfo.getBatteryTemperature();
-  } catch {
-    batteryTemp = undefined;
-  }
+  const batteryTemp: number | undefined = undefined;
 
   const location = await getCurrentLocation();
   const batteryPercent = Math.round((batteryLevel || 0) * 100);

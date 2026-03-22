@@ -9,11 +9,12 @@ import {
   Alert,
   Animated,
   Easing,
+  Linking,
 } from 'react-native';
 import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
 import { deviceStore } from '../stores/deviceStore';
-import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig } from '../api/client';
+import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig, apiGetPublicSettings, SocialLink } from '../api/client';
 
 export default function AccountScreen() {
   const { theme, themeName, setThemeName } = useTheme();
@@ -21,6 +22,7 @@ export default function AccountScreen() {
   const [source, setSource] = useState('Indonesia');
   const [target, setTarget] = useState('Arab');
   const [languages, setLanguages] = useState<string[]>([]);
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
   const [saving, setSaving] = useState(false);
 
   const enterAnim = useRef(new Animated.Value(0)).current;
@@ -64,6 +66,8 @@ export default function AccountScreen() {
         const settings = await apiGetDeviceSettings('default');
         setSource(settings.source || 'Indonesia');
         setTarget(settings.target || 'Arab');
+        const pub = await apiGetPublicSettings(url);
+        setSocialLinks(pub.social_links || []);
       } catch (e) {
         // ignore
       }
@@ -184,6 +188,27 @@ export default function AccountScreen() {
           </View>
 
           <View style={styles.card}>
+            <Text style={styles.cardTitle}>Media Sosial</Text>
+            <Text style={styles.cardSubtitle}>Link resmi dari admin</Text>
+            {socialLinks.length === 0 ? (
+              <Text style={styles.emptyText}>Belum ada link.</Text>
+            ) : (
+              socialLinks.map((item, idx) => (
+                <TouchableOpacity
+                  key={`${item.label}-${idx}`}
+                  style={styles.socialBtn}
+                  onPress={() => Linking.openURL(item.url)}
+                >
+                  <Text style={styles.socialLabel}>{item.label}</Text>
+                  <Text style={styles.socialUrl} numberOfLines={1}>
+                    {item.url}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+
+          <View style={styles.card}>
             <Text style={styles.cardTitle}>Akun</Text>
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
               <Text style={styles.logoutText}>Logout</Text>
@@ -299,4 +324,31 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
     },
     logoutText: { color: theme.colors.white, fontWeight: '700' },
+    emptyText: {
+      marginTop: theme.spacing.sm,
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textMuted,
+      fontFamily: theme.fonts.body,
+    },
+    socialBtn: {
+      marginTop: theme.spacing.sm,
+      backgroundColor: theme.colors.surfaceLight,
+      borderRadius: theme.radius.md,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+    },
+    socialLabel: {
+      fontSize: theme.fontSize.sm,
+      fontWeight: '700',
+      color: theme.colors.text,
+      fontFamily: theme.fonts.heading,
+    },
+    socialUrl: {
+      marginTop: 4,
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      fontFamily: theme.fonts.body,
+    },
   });

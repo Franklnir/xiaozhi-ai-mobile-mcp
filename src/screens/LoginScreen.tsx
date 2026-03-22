@@ -13,17 +13,90 @@ import {
   Easing,
 } from 'react-native';
 import { Theme, useTheme } from '../theme/theme';
-import { apiLogin, apiRegister } from '../api/client';
+import { apiGetPublicSettings, apiLogin, apiRegister } from '../api/client';
 import { authStore } from '../stores/authStore';
 
 interface LoginScreenProps {
   onLoginSuccess?: () => void;
 }
 
+type LangKey = 'id' | 'en' | 'ar';
+
+const LANG_OPTIONS: { key: LangKey; label: string }[] = [
+  { key: 'id', label: 'ID' },
+  { key: 'en', label: 'EN' },
+  { key: 'ar', label: 'AR' },
+];
+
+const TEXT: Record<LangKey, Record<string, string>> = {
+  id: {
+    login: 'Login',
+    register: 'Register',
+    loginSubtitle: 'Masuk dengan akun SciG Mode MCP Anda',
+    registerSubtitle: 'Buat akun baru SciG Mode MCP',
+    serverUrl: 'Server URL',
+    username: 'Username',
+    password: 'Password',
+    confirmPassword: 'Konfirmasi Password',
+    registerCode: 'Kode Register',
+    loginBtn: 'Masuk',
+    registerBtn: 'Daftar',
+    haveAccount: 'Sudah punya akun?',
+    noAccount: 'Belum punya akun?',
+    switchToLogin: 'Masuk di sini',
+    switchToRegister: 'Daftar di sini',
+    required: 'Semua field wajib diisi',
+    codeRequired: 'Kode register wajib diisi',
+    registerNoCode: 'Registrasi tanpa code (diset oleh admin).',
+  },
+  en: {
+    login: 'Login',
+    register: 'Register',
+    loginSubtitle: 'Sign in with your SciG Mode MCP account',
+    registerSubtitle: 'Create a new SciG Mode MCP account',
+    serverUrl: 'Server URL',
+    username: 'Username',
+    password: 'Password',
+    confirmPassword: 'Confirm Password',
+    registerCode: 'Register Code',
+    loginBtn: 'Sign In',
+    registerBtn: 'Sign Up',
+    haveAccount: 'Already have an account?',
+    noAccount: "Don't have an account?",
+    switchToLogin: 'Sign in here',
+    switchToRegister: 'Register here',
+    required: 'All fields are required',
+    codeRequired: 'Register code is required',
+    registerNoCode: 'Registration without code (set by admin).',
+  },
+  ar: {
+    login: 'تسجيل الدخول',
+    register: 'تسجيل',
+    loginSubtitle: 'سجّل الدخول بحساب SciG Mode MCP',
+    registerSubtitle: 'أنشئ حساب SciG Mode MCP جديد',
+    serverUrl: 'رابط الخادم',
+    username: 'اسم المستخدم',
+    password: 'كلمة المرور',
+    confirmPassword: 'تأكيد كلمة المرور',
+    registerCode: 'رمز التسجيل',
+    loginBtn: 'دخول',
+    registerBtn: 'تسجيل',
+    haveAccount: 'لديك حساب؟',
+    noAccount: 'ليس لديك حساب؟',
+    switchToLogin: 'سجّل هنا',
+    switchToRegister: 'سجّل هنا',
+    required: 'جميع الحقول مطلوبة',
+    codeRequired: 'رمز التسجيل مطلوب',
+    registerNoCode: 'التسجيل بدون رمز (من الإعدادات).',
+  },
+};
+
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const { theme } = useTheme();
   const [serverUrl, setServerUrl] = useState('http://192.168.1.100:8000');
   const [isRegister, setIsRegister] = useState(false);
+  const [language, setLanguage] = useState<LangKey>('id');
+  const [registerRequiresCode, setRegisterRequiresCode] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,8 +110,31 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     (async () => {
       const saved = await authStore.getServerUrl();
       if (saved) setServerUrl(saved);
+      const savedLang = await authStore.getLanguage();
+      if (savedLang === 'id' || savedLang === 'en' || savedLang === 'ar') {
+        setLanguage(savedLang);
+      }
+      try {
+        const settings = await apiGetPublicSettings(saved || serverUrl);
+        setRegisterRequiresCode(settings.register_requires_code !== false);
+      } catch {
+        // ignore
+      }
     })();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const url = serverUrl.trim();
+      if (!url) return;
+      apiGetPublicSettings(url)
+        .then((settings) => {
+          setRegisterRequiresCode(settings.register_requires_code !== false);
+        })
+        .catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [serverUrl]);
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -51,6 +147,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   }, [enterAnim]);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const t = (key: string) => TEXT[language]?.[key] || TEXT.id[key] || key;
 
   const logoAnimStyle = {
     opacity: enterAnim,
@@ -83,7 +180,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
   async function handleLogin() {
     if (!serverUrl.trim() || !username.trim() || !password.trim()) {
-      setError('Semua field wajib diisi');
+      setError(t('required'));
       return;
     }
 
@@ -109,10 +206,13 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       !serverUrl.trim() ||
       !username.trim() ||
       !password.trim() ||
-      !confirmPassword.trim() ||
-      !registerCode.trim()
+      !confirmPassword.trim()
     ) {
-      setError('Semua field wajib diisi');
+      setError(t('required'));
+      return;
+    }
+    if (registerRequiresCode && !registerCode.trim()) {
+      setError(t('codeRequired'));
       return;
     }
 
@@ -125,10 +225,10 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         username.trim(),
         password,
         confirmPassword,
-        registerCode.trim(),
+        registerRequiresCode ? registerCode.trim() : undefined,
       );
       if (result.success) {
-        onLoginSuccess();
+        onLoginSuccess?.();
       } else {
         setError(result.error || 'Register gagal');
       }
@@ -144,6 +244,24 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      <View style={styles.langSelector}>
+        {LANG_OPTIONS.map((opt) => {
+          const active = language === opt.key;
+          return (
+            <TouchableOpacity
+              key={opt.key}
+              style={[styles.langChip, active && styles.langChipActive]}
+              onPress={() => {
+                setLanguage(opt.key);
+                authStore.setLanguage(opt.key).catch(() => {});
+              }}
+            >
+              <Text style={[styles.langChipText, active && styles.langChipTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* Logo area */}
         <Animated.View style={[styles.logoArea, logoAnimStyle]}>
@@ -154,9 +272,9 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         {/* Login card */}
         <Animated.View style={[styles.card, cardAnimStyle]}>
-          <Text style={styles.cardTitle}>{isRegister ? 'Register' : 'Login'}</Text>
+          <Text style={styles.cardTitle}>{isRegister ? t('register') : t('login')}</Text>
           <Text style={styles.cardSubtitle}>
-            {isRegister ? 'Buat akun baru SciG Mode MCP' : 'Masuk dengan akun SciG Mode MCP Anda'}
+            {isRegister ? t('registerSubtitle') : t('loginSubtitle')}
           </Text>
 
           {error ? (
@@ -165,7 +283,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             </View>
           ) : null}
 
-          <Text style={styles.label}>Server URL</Text>
+          <Text style={styles.label}>{t('serverUrl')}</Text>
           <TextInput
             style={styles.input}
             placeholder="http://192.168.1.100:8000"
@@ -177,7 +295,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             keyboardType="url"
           />
 
-          <Text style={styles.label}>Username</Text>
+          <Text style={styles.label}>{t('username')}</Text>
           <TextInput
             style={styles.input}
             placeholder="username"
@@ -188,7 +306,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             autoCorrect={false}
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>{t('password')}</Text>
           <View style={styles.passwordRow}>
             <TextInput
               style={styles.passwordInput}
@@ -209,7 +327,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
           {isRegister ? (
             <>
-              <Text style={styles.label}>Konfirmasi Password</Text>
+              <Text style={styles.label}>{t('confirmPassword')}</Text>
               <View style={styles.passwordRow}>
                 <TextInput
                   style={styles.passwordInput}
@@ -228,16 +346,22 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.label}>Kode Register</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="10 karakter"
-                placeholderTextColor={theme.colors.textMuted}
-                value={registerCode}
-                onChangeText={setRegisterCode}
-                autoCapitalize="characters"
-                autoCorrect={false}
-              />
+              {registerRequiresCode ? (
+                <>
+                  <Text style={styles.label}>{t('registerCode')}</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="10 karakter"
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={registerCode}
+                    onChangeText={setRegisterCode}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                </>
+              ) : (
+                <Text style={styles.infoText}>{t('registerNoCode')}</Text>
+              )}
             </>
           ) : null}
 
@@ -250,17 +374,17 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             {loading ? (
               <ActivityIndicator color={theme.colors.white} />
             ) : (
-              <Text style={styles.buttonText}>{isRegister ? 'Daftar' : 'Masuk'}</Text>
+              <Text style={styles.buttonText}>{isRegister ? t('registerBtn') : t('loginBtn')}</Text>
             )}
           </TouchableOpacity>
 
           <Text style={styles.hint}>
-            {isRegister ? 'Sudah punya akun?' : 'Belum punya akun?'}{' '}
+            {isRegister ? t('haveAccount') : t('noAccount')}{' '}
             <Text
               style={styles.hintLink}
               onPress={() => switchMode(!isRegister)}
             >
-              {isRegister ? 'Masuk di sini' : 'Daftar di sini'}
+              {isRegister ? t('switchToLogin') : t('switchToRegister')}
             </Text>
           </Text>
         </Animated.View>
@@ -274,6 +398,36 @@ const createStyles = (theme: Theme) =>
     container: {
       flex: 1,
       backgroundColor: theme.colors.bg,
+    },
+    langSelector: {
+      position: 'absolute',
+      top: theme.spacing.lg,
+      left: theme.spacing.lg,
+      flexDirection: 'row',
+      gap: theme.spacing.xs,
+      zIndex: 10,
+    },
+    langChip: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.full,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+    },
+    langChipActive: {
+      backgroundColor: theme.colors.accentLight,
+      borderColor: theme.isNeo ? theme.colors.black : theme.colors.accent,
+    },
+    langChipText: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      fontFamily: theme.fonts.body,
+    },
+    langChipTextActive: {
+      color: theme.colors.black,
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
     },
     scrollContent: {
       flexGrow: 1,
@@ -339,6 +493,12 @@ const createStyles = (theme: Theme) =>
       color: theme.colors.textSecondary,
       marginBottom: theme.spacing.xs,
       marginTop: theme.spacing.md,
+      fontFamily: theme.fonts.body,
+    },
+    infoText: {
+      marginTop: theme.spacing.sm,
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
       fontFamily: theme.fonts.body,
     },
     input: {

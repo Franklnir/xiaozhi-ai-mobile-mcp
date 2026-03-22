@@ -25,7 +25,7 @@ import { registerDevice, sendHeartbeat, startTracking, stopTracking } from '../s
 
 export default function DevicesScreen() {
   const { theme } = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const isFocused = useIsFocused();
   const [deviceId, setDeviceId] = useState('');
   const [deviceToken, setDeviceToken] = useState('');

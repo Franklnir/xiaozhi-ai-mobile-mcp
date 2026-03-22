@@ -2,6 +2,7 @@ import EncryptedStorage from 'react-native-encrypted-storage';
 
 const TOKEN_KEY = 'scig_access_token';
 const SERVER_URL_KEY = 'scig_server_url';
+const LANG_KEY = 'scig_lang';
 
 type AuthListener = (token: string | null) => void;
 const listeners = new Set<AuthListener>();
@@ -59,6 +60,18 @@ export const authStore = {
     } catch {
       // ignore
     }
+  },
+
+  async getLanguage(): Promise<string> {
+    try {
+      return (await EncryptedStorage.getItem(LANG_KEY)) || 'id';
+    } catch {
+      return 'id';
+    }
+  },
+
+  async setLanguage(lang: string): Promise<void> {
+    await EncryptedStorage.setItem(LANG_KEY, lang);
   },
 
   subscribe(listener: AuthListener): () => void {
