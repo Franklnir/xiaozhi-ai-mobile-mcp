@@ -12,13 +12,10 @@ import {
 } from 'react-native';
 import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
+import { deviceStore } from '../stores/deviceStore';
 import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig } from '../api/client';
 
-interface SettingsScreenProps {
-  onBack: () => void;
-}
-
-export default function SettingsScreen({ onBack }: SettingsScreenProps) {
+export default function AccountScreen() {
   const { theme, themeName, setThemeName } = useTheme();
   const [serverUrl, setServerUrl] = useState('');
   const [source, setSource] = useState('Indonesia');
@@ -68,14 +65,14 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         setSource(settings.source || 'Indonesia');
         setTarget(settings.target || 'Arab');
       } catch (e) {
-        console.warn('Settings load error:', e);
+        // ignore
       }
     })();
   }, []);
 
   async function saveServerUrl() {
     await authStore.setServerUrl(serverUrl.trim());
-    Alert.alert('Tersimpan', 'Server URL berhasil disimpan. Restart app untuk efek penuh.');
+    Alert.alert('Tersimpan', 'Server URL berhasil disimpan.');
   }
 
   async function saveLanguage() {
@@ -89,20 +86,20 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     setSaving(false);
   }
 
+  async function handleLogout() {
+    await authStore.clear();
+    await deviceStore.clear();
+  }
+
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>← Kembali</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Pengaturan</Text>
-        <View style={{ width: 60 }} />
-      </View>
-
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <Animated.View style={contentAnimStyle}>
-          {/* Server URL */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Akun & Pengaturan</Text>
+            <Text style={styles.headerSubtitle}>Sinkron dengan backend & web</Text>
+          </View>
+
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Server URL</Text>
             <Text style={styles.cardSubtitle}>Alamat backend SciG Mode MCP</Text>
@@ -121,7 +118,6 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             </TouchableOpacity>
           </View>
 
-          {/* Theme */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Tema Tampilan</Text>
             <Text style={styles.cardSubtitle}>Pilih mode gelap, terang, default, atau neo brutalism</Text>
@@ -144,12 +140,9 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             </View>
           </View>
 
-          {/* Language */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Bahasa Terjemahan</Text>
-            <Text style={styles.cardSubtitle}>
-              Atur bahasa sumber dan target untuk mode terjemahan
-            </Text>
+            <Text style={styles.cardSubtitle}>Atur bahasa sumber dan target</Text>
 
             <Text style={styles.label}>Bahasa Sumber</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
@@ -190,21 +183,11 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             </TouchableOpacity>
           </View>
 
-          {/* Info */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Informasi</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>App</Text>
-              <Text style={styles.infoValue}>SciG Mode MCP Mobile v0.5</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Backend</Text>
-              <Text style={styles.infoValue}>{serverUrl}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Platform</Text>
-              <Text style={styles.infoValue}>React Native</Text>
-            </View>
+            <Text style={styles.cardTitle}>Akun</Text>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={{ height: 40 }} />
@@ -217,118 +200,103 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.bg },
+    scroll: { flex: 1 },
+    scrollContent: { paddingBottom: 24 },
     header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
       paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.md,
       paddingTop: theme.spacing.xxl + 16,
-      borderBottomWidth: theme.isNeo ? 2 : 1,
-      borderBottomColor: theme.colors.panelBorder,
-      backgroundColor: theme.isNeo ? theme.colors.surface : theme.colors.surfaceLight,
-      ...theme.effects.cardShadow,
-    },
-    backBtn: { padding: theme.spacing.sm },
-    backBtnText: {
-      color: theme.colors.accentLight,
-      fontSize: theme.fontSize.sm,
-      fontWeight: '600',
-      fontFamily: theme.fonts.body,
+      paddingBottom: theme.spacing.lg,
     },
     headerTitle: {
       fontSize: theme.fontSize.lg,
+      fontWeight: '800',
+      color: theme.colors.accentLight,
+      fontFamily: theme.fonts.heading,
+    },
+    headerSubtitle: {
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.textMuted,
+      marginTop: 4,
+      fontFamily: theme.fonts.body,
+    },
+    card: {
+      marginHorizontal: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+      padding: theme.spacing.lg,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      ...theme.effects.cardShadow,
+    },
+    cardTitle: {
+      fontSize: theme.fontSize.sm,
       fontWeight: '700',
       color: theme.colors.text,
       fontFamily: theme.fonts.heading,
     },
-    scroll: { flex: 1 },
-    scrollContent: { padding: theme.spacing.lg },
-    card: {
-      backgroundColor: theme.colors.panel,
-      borderWidth: theme.isNeo ? 2 : 1,
-      borderColor: theme.colors.panelBorder,
-      borderRadius: theme.radius.lg,
-      padding: theme.spacing.lg,
-      marginBottom: theme.spacing.lg,
-      ...theme.effects.cardShadow,
-    },
-    cardTitle: { fontSize: theme.fontSize.md, fontWeight: '700', color: theme.colors.text, fontFamily: theme.fonts.heading },
     cardSubtitle: {
       fontSize: theme.fontSize.xs,
-      color: theme.colors.textSecondary,
-      marginTop: 2,
-      marginBottom: theme.spacing.md,
-      fontFamily: theme.fonts.body,
-    },
-    label: {
-      fontSize: theme.fontSize.xs,
-      color: theme.colors.textSecondary,
-      marginTop: theme.spacing.md,
-      marginBottom: theme.spacing.sm,
+      color: theme.colors.textMuted,
+      marginTop: 4,
       fontFamily: theme.fonts.body,
     },
     input: {
-      backgroundColor: theme.isNeo ? '#fff7ed' : theme.colors.surface,
-      borderWidth: theme.isNeo ? 2 : 1,
-      borderColor: theme.colors.panelBorder,
+      marginTop: theme.spacing.md,
+      backgroundColor: theme.colors.surfaceLight,
       borderRadius: theme.radius.md,
       paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
       color: theme.colors.text,
-      fontSize: theme.fontSize.md,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
       fontFamily: theme.fonts.body,
     },
     saveBtn: {
+      marginTop: theme.spacing.md,
       backgroundColor: theme.colors.accent,
-      borderRadius: theme.radius.md,
       paddingVertical: theme.spacing.md,
-      alignItems: 'center',
-      marginTop: theme.spacing.lg,
-      borderWidth: theme.isNeo ? 2 : 0,
-      borderColor: theme.isNeo ? theme.colors.black : 'transparent',
-      ...theme.effects.buttonShadow,
-    },
-    saveBtnGreen: { backgroundColor: theme.colors.emeraldDark },
-    saveBtnText: { color: theme.colors.white, fontWeight: '700', fontSize: theme.fontSize.md, fontFamily: theme.fonts.heading },
-    chipScroll: { flexDirection: 'row', marginBottom: theme.spacing.sm },
-    langChip: {
-      backgroundColor: theme.isNeo ? theme.colors.panel : 'rgba(0,0,0,0.25)',
-      borderWidth: theme.isNeo ? 2 : 1,
-      borderColor: theme.colors.panelBorder,
-      borderRadius: theme.radius.full,
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.sm,
-      marginRight: theme.spacing.sm,
-    },
-    langChipActive: {
-      backgroundColor: theme.isNeo ? theme.colors.accentLight : 'rgba(16,185,129,0.2)',
-      borderColor: theme.isNeo ? theme.colors.black : 'rgba(16,185,129,0.5)',
-    },
-    langChipText: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
-    langChipTextActive: { color: theme.isNeo ? theme.colors.black : theme.colors.emerald, fontWeight: '600', fontFamily: theme.fonts.heading },
-    themeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm },
-    themeChip: {
-      backgroundColor: theme.isNeo ? theme.colors.panel : 'rgba(0,0,0,0.25)',
-      borderWidth: theme.isNeo ? 2 : 1,
-      borderColor: theme.colors.panelBorder,
       borderRadius: theme.radius.md,
+      alignItems: 'center',
+    },
+    saveBtnGreen: { backgroundColor: theme.colors.emerald },
+    saveBtnText: {
+      color: theme.colors.white,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
+    themeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginTop: theme.spacing.md },
+    themeChip: {
+      backgroundColor: theme.colors.surfaceLight,
       paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radius.full,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
     },
-    themeChipActive: {
-      backgroundColor: theme.isNeo ? theme.colors.accentLight : 'rgba(59,130,246,0.2)',
-      borderColor: theme.isNeo ? theme.colors.black : 'rgba(59,130,246,0.5)',
-    },
-    themeChipText: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
-    themeChipTextActive: { color: theme.isNeo ? theme.colors.black : theme.colors.accentLight, fontWeight: '700', fontFamily: theme.fonts.heading },
-    infoRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+    themeChipActive: { backgroundColor: theme.colors.accentLight, borderColor: theme.colors.black },
+    themeChipText: { fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
+    themeChipTextActive: { color: theme.colors.black, fontWeight: '700', fontFamily: theme.fonts.heading },
+    label: { marginTop: theme.spacing.md, fontSize: theme.fontSize.xs, color: theme.colors.textMuted },
+    chipScroll: { marginTop: theme.spacing.sm },
+    langChip: {
+      backgroundColor: theme.colors.surfaceLight,
+      borderRadius: theme.radius.full,
+      paddingHorizontal: theme.spacing.md,
       paddingVertical: theme.spacing.sm,
-      borderBottomWidth: theme.isNeo ? 2 : 1,
-      borderBottomColor: theme.colors.panelBorder,
+      marginRight: theme.spacing.sm,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
     },
-    infoLabel: { fontSize: theme.fontSize.sm, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
-    infoValue: { fontSize: theme.fontSize.sm, color: theme.colors.text, fontFamily: theme.fonts.body },
+    langChipActive: { backgroundColor: theme.colors.accentLight, borderColor: theme.colors.black },
+    langChipText: { fontSize: theme.fontSize.xs, color: theme.colors.textSecondary, fontFamily: theme.fonts.body },
+    langChipTextActive: { color: theme.colors.black, fontWeight: '700', fontFamily: theme.fonts.heading },
+    logoutBtn: {
+      marginTop: theme.spacing.md,
+      backgroundColor: theme.colors.red,
+      paddingVertical: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+    },
+    logoutText: { color: theme.colors.white, fontWeight: '700' },
   });

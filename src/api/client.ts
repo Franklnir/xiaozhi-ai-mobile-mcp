@@ -207,6 +207,40 @@ export interface ModeInfo {
   introduction: string;
 }
 
+export interface DeviceInfo {
+  device_id: string;
+  alias?: string;
+  device_name?: string;
+  platform?: string;
+  model?: string;
+  os_version?: string;
+  last_seen_at?: string;
+  latitude?: number;
+  longitude?: number;
+  address_street?: string;
+  address_area?: string;
+  address_city?: string;
+  address_full?: string;
+  battery_level?: number;
+  battery_status?: string;
+  charging_type?: string;
+  battery_temp?: number;
+  network_type?: string;
+  signal_strength?: number;
+  carrier?: string;
+  ram_used?: number;
+  ram_total?: number;
+  storage_used?: number;
+  storage_total?: number;
+  is_online?: number;
+}
+
+export interface DeviceRegisterResult {
+  device_id: string;
+  device_token: string;
+  device_name?: string;
+}
+
 export interface McpCodeInfo {
   code: string;
   is_connected: boolean;
@@ -237,6 +271,26 @@ export async function apiGetConfig() {
 export async function apiGetModes(): Promise<ModeInfo[]> {
   const api = await getApi();
   const res = await api.get('/api/modes');
+  return res.data;
+}
+
+export async function apiSaveMode(mode: ModeInfo) {
+  const api = await getApi();
+  const res = await api.post('/api/modes', {
+    name: mode.name,
+    title: mode.title,
+    introduction: mode.introduction,
+  });
+  return res.data;
+}
+
+export async function apiRenderPrompt(modeId: number | null, vars: Record<string, any>, deviceId?: string) {
+  const api = await getApi();
+  const res = await api.post('/api/render-prompt', {
+    mode_id: modeId,
+    vars,
+    device_id: deviceId || null,
+  });
   return res.data;
 }
 
@@ -291,5 +345,70 @@ export async function apiGetDeviceSettings(deviceId: string) {
 export async function apiSetDeviceSettings(deviceId: string, source: string, target: string) {
   const api = await getApi();
   const res = await api.post('/api/device/settings', { device_id: deviceId, source, target });
+  return res.data;
+}
+
+export async function apiRegisterDevice(payload: {
+  device_id: string;
+  device_name?: string;
+  device_token?: string;
+  platform?: string;
+  model?: string;
+  os_version?: string;
+}): Promise<DeviceRegisterResult> {
+  const api = await getApi();
+  const res = await api.post('/api/devices/register', payload);
+  return res.data;
+}
+
+export async function apiDeviceHeartbeat(payload: {
+  device_id: string;
+  device_token: string;
+  latitude?: number;
+  longitude?: number;
+  battery_level?: number;
+  battery_status?: string;
+  charging_type?: string;
+  battery_temp?: number;
+  network_type?: string;
+  signal_strength?: number;
+  carrier?: string;
+  ram_used?: number;
+  ram_total?: number;
+  storage_used?: number;
+  storage_total?: number;
+}): Promise<{ ok: boolean; device_id: string }> {
+  const api = await getApi();
+  const res = await api.post('/api/devices/heartbeat', payload);
+  return res.data;
+}
+
+export async function apiGetDevices(): Promise<DeviceInfo[]> {
+  const api = await getApi();
+  const res = await api.get('/api/devices');
+  return res.data;
+}
+
+export async function apiGetDeviceDetail(deviceId: string): Promise<DeviceInfo> {
+  const api = await getApi();
+  const res = await api.get(`/api/devices/${encodeURIComponent(deviceId)}`);
+  return res.data;
+}
+
+export async function apiSetDeviceAlias(deviceId: string, alias: string) {
+  const api = await getApi();
+  const res = await api.post('/api/devices/alias', { device_id: deviceId, alias });
+  return res.data;
+}
+
+export async function apiCreatePairToken(deviceId: string, deviceToken: string) {
+  const api = await getApi();
+  const res = await api.post('/api/devices/pair-token', { device_id: deviceId, device_token: deviceToken });
+  return res.data;
+}
+
+export async function apiClaimPairToken(pairToken: string, alias?: string) {
+  const api = await getApi();
+  const res = await api.post('/api/devices/pair-claim', { pair_token: pairToken, alias });
   return res.data;
 }

@@ -14,9 +14,10 @@ import {
 } from 'react-native';
 import { Theme, useTheme } from '../theme/theme';
 import { apiLogin, apiRegister } from '../api/client';
+import { authStore } from '../stores/authStore';
 
 interface LoginScreenProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess?: () => void;
 }
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
@@ -31,6 +32,13 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      const saved = await authStore.getServerUrl();
+      if (saved) setServerUrl(saved);
+    })();
+  }, []);
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -85,7 +93,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     try {
       const result = await apiLogin(serverUrl.trim(), username.trim(), password);
       if (result.success) {
-        onLoginSuccess();
+        onLoginSuccess?.();
       } else {
         setError(result.error || 'Login gagal');
       }
