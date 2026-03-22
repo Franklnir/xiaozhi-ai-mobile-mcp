@@ -37,34 +37,78 @@ function isLocalOrLanHost(hostname: string): boolean {
   return isLocalHostname(host) || isPrivateIpv4(host) || isPrivateIpv6(host);
 }
 
+function parseHostPort(authority: string): { hostname: string; hostPort: string } {
+  const value = authority.trim();
+  if (!value) {
+    throw new Error('Hostname server tidak valid.');
+  }
+
+  if (value.startsWith('[')) {
+    const closingIndex = value.indexOf(']');
+    if (closingIndex <= 1) {
+      throw new Error('Hostname server tidak valid.');
+    }
+    const hostname = value.slice(1, closingIndex).trim().toLowerCase();
+    const remainder = value.slice(closingIndex + 1);
+    if (!hostname) {
+      throw new Error('Hostname server tidak valid.');
+    }
+    if (!remainder) {
+      return { hostname, hostPort: `[${hostname}]` };
+    }
+    if (!remainder.startsWith(':')) {
+      throw new Error('Port server tidak valid.');
+    }
+    const port = remainder.slice(1);
+    if (!/^\d{1,5}$/.test(port)) {
+      throw new Error('Port server tidak valid.');
+    }
+    const portNumber = Number(port);
+    if (portNumber < 1 || portNumber > 65535) {
+      throw new Error('Port server tidak valid.');
+    }
+    return { hostname, hostPort: `[${hostname}]:${portNumber}` };
+  }
+
+  const parts = value.split(':');
+  if (parts.length === 1) {
+    const hostname = value.toLowerCase();
+    return { hostname, hostPort: hostname };
+  }
+
+  const maybePort = parts[parts.length - 1];
+  if (!/^\d{1,5}$/.test(maybePort)) {
+    throw new Error('Gunakan format host:port yang valid.');
+  }
+  const portNumber = Number(maybePort);
+  if (portNumber < 1 || portNumber > 65535) {
+    throw new Error('Port server tidak valid.');
+  }
+
+  const hostname = parts.slice(0, -1).join(':').trim().toLowerCase();
+  if (!hostname) {
+    throw new Error('Hostname server tidak valid.');
+  }
+  return { hostname, hostPort: `${hostname}:${portNumber}` };
+}
+
 export function validateServerUrl(input: string): string {
   const raw = (input || '').trim();
   if (!raw) {
     throw new Error('Server URL wajib diisi.');
   }
 
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
+  const match = raw.match(/^(https?):\/\/([^/?#]+)(?:[/?#].*)?$/i);
+  if (!match) {
     throw new Error('Server URL tidak valid. Gunakan format http:// atau https://');
   }
 
-  const protocol = parsed.protocol.toLowerCase();
-  if (protocol !== 'https:' && protocol !== 'http:') {
-    throw new Error('Server URL harus memakai http:// atau https://');
-  }
+  const protocol = match[1].toLowerCase();
+  const { hostname, hostPort } = parseHostPort(match[2]);
 
-  if (!parsed.hostname) {
-    throw new Error('Hostname server tidak valid.');
-  }
-
-  if (protocol === 'http:' && !isLocalOrLanHost(parsed.hostname)) {
+  if (protocol === 'http' && !isLocalOrLanHost(hostname)) {
     throw new Error('HTTP hanya boleh untuk localhost/LAN. Untuk VPS atau production wajib HTTPS.');
   }
 
-  parsed.pathname = '';
-  parsed.search = '';
-  parsed.hash = '';
-  return parsed.toString().replace(/\/$/, '');
+  return `${protocol}://${hostPort}`;
 }
