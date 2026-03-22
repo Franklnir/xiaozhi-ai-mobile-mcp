@@ -92,11 +92,28 @@ export async function apiLogin(
     formData.append('password', password);
 
     const response = await axios.post(`${serverUrl}/login`, formData.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        'X-Client': 'mobile',
+      },
       maxRedirects: 0,
-      validateStatus: (status) => status >= 200 && status < 400,
+      validateStatus: (status) => status >= 200 && status < 500,
       withCredentials: true,
     });
+
+    const data = response.data;
+    if (data && typeof data === 'object') {
+      const token = data.access_token || data.token;
+      if (typeof token === 'string' && token.length > 0) {
+        await authStore.setToken(token);
+        await initApiClient();
+        return { success: true, token };
+      }
+      if (data.error) {
+        return { success: false, error: data.error };
+      }
+    }
 
     // Extract access_token from Set-Cookie header
     const cookies = response.headers['set-cookie'];
@@ -139,11 +156,28 @@ export async function apiRegister(
     formData.append('code', code);
 
     const response = await axios.post(`${serverUrl}/register`, formData.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        'X-Client': 'mobile',
+      },
       maxRedirects: 0,
-      validateStatus: (status) => status >= 200 && status < 400,
+      validateStatus: (status) => status >= 200 && status < 500,
       withCredentials: true,
     });
+
+    const data = response.data;
+    if (data && typeof data === 'object') {
+      const token = data.access_token || data.token;
+      if (typeof token === 'string' && token.length > 0) {
+        await authStore.setToken(token);
+        await initApiClient();
+        return { success: true, token };
+      }
+      if (data.error) {
+        return { success: false, error: data.error };
+      }
+    }
 
     const cookies = response.headers['set-cookie'];
     if (cookies) {
