@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Colors, Spacing, Radius, FontSize } from '../theme/colors';
-import { apiLogin } from '../api/client';
+import { apiLogin, apiRegister } from '../api/client';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -20,10 +20,20 @@ interface LoginScreenProps {
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [serverUrl, setServerUrl] = useState('http://192.168.1.100:8000');
+  const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [registerCode, setRegisterCode] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  function switchMode(nextIsRegister: boolean) {
+    setIsRegister(nextIsRegister);
+    setError('');
+  }
 
   async function handleLogin() {
     if (!serverUrl.trim() || !username.trim() || !password.trim()) {
@@ -48,6 +58,41 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     }
   }
 
+  async function handleRegister() {
+    if (
+      !serverUrl.trim() ||
+      !username.trim() ||
+      !password.trim() ||
+      !confirmPassword.trim() ||
+      !registerCode.trim()
+    ) {
+      setError('Semua field wajib diisi');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const result = await apiRegister(
+        serverUrl.trim(),
+        username.trim(),
+        password,
+        confirmPassword,
+        registerCode.trim(),
+      );
+      if (result.success) {
+        onLoginSuccess();
+      } else {
+        setError(result.error || 'Register gagal');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Terjadi kesalahan');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -63,8 +108,10 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         {/* Login card */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Login</Text>
-          <Text style={styles.cardSubtitle}>Masuk dengan akun SciG Mode MCP Anda</Text>
+          <Text style={styles.cardTitle}>{isRegister ? 'Register' : 'Login'}</Text>
+          <Text style={styles.cardSubtitle}>
+            {isRegister ? 'Buat akun baru SciG Mode MCP' : 'Masuk dengan akun SciG Mode MCP Anda'}
+          </Text>
 
           {error ? (
             <View style={styles.errorBox}>
@@ -96,30 +143,79 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           />
 
           <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••"
-            placeholderTextColor={Colors.textMuted}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          <View style={styles.passwordRow}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="••••••"
+              placeholderTextColor={Colors.textMuted}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((prev) => !prev)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {isRegister ? (
+            <>
+              <Text style={styles.label}>Konfirmasi Password</Text>
+              <View style={styles.passwordRow}>
+                <TextInput
+                  style={styles.passwordInput}
+                  placeholder="••••••"
+                  placeholderTextColor={Colors.textMuted}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowConfirmPassword((prev) => !prev)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.eyeText}>{showConfirmPassword ? '🙈' : '👁'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>Kode Register</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="10 karakter"
+                placeholderTextColor={Colors.textMuted}
+                value={registerCode}
+                onChangeText={setRegisterCode}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+            </>
+          ) : null}
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
+            onPress={isRegister ? handleRegister : handleLogin}
             disabled={loading}
             activeOpacity={0.8}
           >
             {loading ? (
               <ActivityIndicator color={Colors.white} />
             ) : (
-              <Text style={styles.buttonText}>Masuk</Text>
+              <Text style={styles.buttonText}>{isRegister ? 'Daftar' : 'Masuk'}</Text>
             )}
           </TouchableOpacity>
 
           <Text style={styles.hint}>
-            Belum punya akun? Daftar melalui halaman web.
+            {isRegister ? 'Sudah punya akun?' : 'Belum punya akun?'}{' '}
+            <Text
+              style={styles.hintLink}
+              onPress={() => switchMode(!isRegister)}
+            >
+              {isRegister ? 'Masuk di sini' : 'Daftar di sini'}
+            </Text>
           </Text>
         </View>
       </ScrollView>
@@ -201,6 +297,29 @@ const styles = StyleSheet.create({
     color: Colors.text,
     fontSize: FontSize.md,
   },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(2,6,23,0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    color: Colors.text,
+    fontSize: FontSize.md,
+  },
+  eyeButton: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+  },
+  eyeText: {
+    color: Colors.textSecondary,
+    fontSize: FontSize.md,
+  },
   button: {
     backgroundColor: Colors.accent,
     borderRadius: Radius.md,
@@ -222,5 +341,9 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     color: Colors.textMuted,
     marginTop: Spacing.lg,
+  },
+  hintLink: {
+    color: Colors.accentLight,
+    textDecorationLine: 'underline',
   },
 });

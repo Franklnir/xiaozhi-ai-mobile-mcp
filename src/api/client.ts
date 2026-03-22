@@ -62,6 +62,18 @@ export interface LoginResult {
   error?: string;
 }
 
+export interface RegisterResult {
+  success: boolean;
+  token?: string;
+  error?: string;
+}
+
+function extractRegisterError(html?: string): string | null {
+  if (!html) return null;
+  const match = html.match(/<div class="mt-5[^>]*>([^<]+)<\/div>/i);
+  return match?.[1]?.trim() || null;
+}
+
 /**
  * Login to the backend. The backend uses cookie-based auth,
  * so we POST form data and extract the cookie from the redirect response.
@@ -103,6 +115,53 @@ export async function apiLogin(
     return { success: false, error: 'Token tidak ditemukan di response' };
   } catch (error: any) {
     const msg = error.response?.data?.error || error.message || 'Login gagal';
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Register a new account. Backend returns HTML; on success it sets cookie + redirect.
+ */
+export async function apiRegister(
+  serverUrl: string,
+  username: string,
+  password: string,
+  confirmPassword: string,
+  code: string,
+): Promise<RegisterResult> {
+  try {
+    await authStore.setServerUrl(serverUrl);
+
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
+    formData.append('confirm_password', confirmPassword);
+    formData.append('code', code);
+
+    const response = await axios.post(`${serverUrl}/register`, formData.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      maxRedirects: 0,
+      validateStatus: (status) => status >= 200 && status < 400,
+      withCredentials: true,
+    });
+
+    const cookies = response.headers['set-cookie'];
+    if (cookies) {
+      for (const cookie of cookies) {
+        const match = cookie.match(/access_token=([^;]+)/);
+        if (match) {
+          const token = match[1];
+          await authStore.setToken(token);
+          await initApiClient();
+          return { success: true, token };
+        }
+      }
+    }
+
+    const html = typeof response.data === 'string' ? response.data : '';
+    return { success: false, error: extractRegisterError(html) || 'Register gagal' };
+  } catch (error: any) {
+    const msg = error.response?.data?.error || error.message || 'Register gagal';
     return { success: false, error: msg };
   }
 }
