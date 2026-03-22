@@ -37,12 +37,16 @@ jobs:
         run: npm ci
 
       - name: Prepare release keystore
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/scig-upload.keystore
+          if [[ -n "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/scig-upload.keystore
+            echo "Production keystore prepared."
+          else
+            echo "No production keystore secret configured; Gradle fallback signing will be used."
+          fi
 
       - name: Resolve Version
         id: vars
