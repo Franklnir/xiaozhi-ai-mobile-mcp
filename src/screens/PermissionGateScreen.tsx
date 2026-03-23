@@ -12,10 +12,10 @@ import {
 import { Theme, useTheme } from '../theme/theme';
 import {
   bootstrapTrackingAfterLogin,
-  getTrackingPermissionSummary,
+  getAppEntryPermissionSummary,
   openAppSettings,
   stopTracking,
-  TrackingPermissionSummary,
+  AppEntryPermissionSummary,
 } from '../services/deviceService';
 import { authStore } from '../stores/authStore';
 import { deviceStore } from '../stores/deviceStore';
@@ -24,14 +24,11 @@ interface PermissionGateScreenProps {
   onReady?: () => void;
 }
 
-function buildHint(summary: TrackingPermissionSummary | null): string {
+function buildHint(summary: AppEntryPermissionSummary | null): string {
   if (!summary || summary.ready) {
     return '';
   }
-  const tail = summary.needsSettings
-    ? ' Di Android terbaru, beberapa izin perlu diaktifkan manual dari Pengaturan Aplikasi > Izin.'
-    : '';
-  return `Aplikasi butuh izin ini agar tracking 10 detik, lokasi real-time, dan foreground service tetap jalan: ${summary.missing.join(', ')}.${tail}`;
+  return `Aplikasi butuh izin ini dulu supaya data HP bisa dibaca dengan aman: ${summary.missing.join(', ')}. Tracking background bisa diaktifkan nanti dari menu Perangkat.`;
 }
 
 export default function PermissionGateScreen({ onReady }: PermissionGateScreenProps) {
@@ -41,8 +38,8 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
   const mountedRef = useRef(true);
   const setupInFlightRef = useRef(false);
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<TrackingPermissionSummary | null>(null);
-  const [message, setMessage] = useState('Menyiapkan izin lokasi, notifikasi, dan sinkronisasi perangkat...');
+  const [summary, setSummary] = useState<AppEntryPermissionSummary | null>(null);
+  const [message, setMessage] = useState('Memeriksa izin lokasi perangkat...');
 
   useEffect(() => {
     Animated.timing(enterAnim, {
@@ -61,28 +58,25 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
     setLoading(true);
     setMessage(
       interactive
-        ? 'Meminta izin lokasi, background, dan notifikasi dengan aman...'
-        : 'Memeriksa ulang status izin perangkat...',
+        ? 'Meminta izin lokasi perangkat dengan aman...'
+        : 'Memeriksa ulang status izin lokasi...',
     );
     try {
-      const result = interactive
+      const nextSummary = interactive
         ? await bootstrapTrackingAfterLogin()
-        : await getTrackingPermissionSummary();
+        : await getAppEntryPermissionSummary();
       if (!mountedRef.current) return;
-      setSummary(result);
-      if (result.ready) {
-        if (!interactive) {
-          await deviceStore.setTrackingEnabled(true);
-        }
+      setSummary(nextSummary);
+      if (nextSummary.ready) {
         setMessage('Izin lengkap. Menyiapkan aplikasi...');
         onReady?.();
         return;
       }
-      setMessage(buildHint(result));
+      setMessage(buildHint(nextSummary));
     } catch (e: any) {
       if (!mountedRef.current) return;
       setSummary(null);
-      setMessage(e?.message || 'Gagal menyiapkan tracking. Coba lagi atau buka pengaturan aplikasi.');
+      setMessage(e?.message || 'Gagal meminta izin lokasi. Coba lagi atau buka pengaturan aplikasi.');
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -93,7 +87,7 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
 
   useEffect(() => {
     mountedRef.current = true;
-    runSetup(true).catch(() => {});
+    runSetup(false).catch(() => {});
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         runSetup(false).catch(() => {});
@@ -130,7 +124,7 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
       <Animated.View style={[styles.card, animStyle]}>
         <Text style={styles.title}>Aktifkan Izin Perangkat</Text>
         <Text style={styles.subtitle}>
-          Setelah login, aplikasi akan meminta izin secara bertahap supaya lebih aman. Jika Android tidak menampilkan dialog lanjutan, lanjutkan dari tombol pengaturan aplikasi.
+          Supaya aplikasi stabil, kita minta izin lokasi dulu untuk membaca data HP. Tracking background tidak langsung dinyalakan saat login dan bisa Anda aktifkan nanti dari menu Perangkat.
         </Text>
 
         <View style={styles.statusBox}>
@@ -151,7 +145,7 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
           onPress={() => runSetup(true).catch(() => {})}
         >
           <Text style={styles.primaryText}>
-            {loading ? 'Memproses...' : summary?.needsSettings ? 'Saya Sudah Aktifkan' : 'Coba Lagi'}
+            {loading ? 'Memproses...' : 'Izinkan Lokasi'}
           </Text>
         </TouchableOpacity>
 

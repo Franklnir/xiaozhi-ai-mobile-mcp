@@ -29,6 +29,20 @@ export interface TrackingPermissionSummary {
   notificationsGranted: boolean;
 }
 
+export interface AppEntryPermissionSummary {
+  ready: boolean;
+  missing: string[];
+  locationGranted: boolean;
+}
+
+function buildAppEntrySummary(locationGranted: boolean): AppEntryPermissionSummary {
+  return {
+    ready: locationGranted,
+    missing: locationGranted ? [] : ['Lokasi perangkat'],
+    locationGranted,
+  };
+}
+
 function isAndroidPermissionRequired(permission: AndroidPermission): boolean {
   if (permission === BACKGROUND_LOCATION) {
     return Platform.OS === 'android' && ANDROID_VERSION >= 29;
@@ -94,11 +108,24 @@ export async function getTrackingPermissionSummary(): Promise<TrackingPermission
   });
 }
 
+export async function getAppEntryPermissionSummary(): Promise<AppEntryPermissionSummary> {
+  if (Platform.OS !== 'android') {
+    return buildAppEntrySummary(true);
+  }
+
+  const fineGranted = await checkAndroidPermission(FINE_LOCATION);
+  const coarseGranted = await checkAndroidPermission(COARSE_LOCATION);
+  return buildAppEntrySummary(fineGranted || coarseGranted);
+}
+
 function buildPermissionError(summary: TrackingPermissionSummary): string {
   if (summary.ready) {
     return '';
   }
-  return `Izin wajib belum lengkap: ${summary.missing.join(', ')}.`;
+  const tail = summary.needsSettings
+    ? ' Sebagian izin harus diaktifkan manual dari Pengaturan Aplikasi.'
+    : '';
+  return `Izin wajib belum lengkap: ${summary.missing.join(', ')}.${tail}`;
 }
 
 async function requestAndroidPermission(
@@ -184,19 +211,19 @@ async function ensureBackgroundLocationPermission(locationGranted: boolean): Pro
       needsSettings: false,
     };
   }
+  return {
+    granted: false,
+    needsSettings: true,
+  };
+}
 
-  if (ANDROID_VERSION >= 30) {
-    return {
-      granted: false,
-      needsSettings: true,
-    };
+export async function requestAppEntryPermissions(): Promise<AppEntryPermissionSummary> {
+  if (Platform.OS !== 'android') {
+    return getAppEntryPermissionSummary();
   }
 
-  const result = await requestAndroidPermission(BACKGROUND_LOCATION);
-  return {
-    granted: await checkAndroidPermission(BACKGROUND_LOCATION),
-    needsSettings: result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
-  };
+  const location = await ensureLocationPermission();
+  return buildAppEntrySummary(location.granted);
 }
 
 export async function requestTrackingPermissions(): Promise<TrackingPermissionSummary> {
@@ -321,6 +348,16 @@ export async function registerDevice() {
   return result;
 }
 
+export async function syncDeviceSnapshot() {
+  const reg = await registerDevice();
+  try {
+    await sendHeartbeat();
+  } catch {
+    // Keep the device registered even if the first foreground sync has not reached the backend yet.
+  }
+  return reg;
+}
+
 export async function sendHeartbeat() {
   let deviceId = await deviceStore.getDeviceId();
   let deviceToken = await deviceStore.getDeviceToken();
@@ -375,12 +412,14 @@ export async function startTracking(options: { skipPermissionCheck?: boolean } =
     }
 
     try {
+      await syncDeviceSnapshot().catch(() => {});
       if (!BackgroundService.isRunning()) {
         await BackgroundService.start(trackingTask, trackingOptions);
       }
     } catch {
+      await deviceStore.setTrackingEnabled(false);
       throw new Error(
-        'Tracking latar belakang belum bisa dinyalakan. Pastikan izin lokasi, notifikasi, dan baterai tidak dibatasi.',
+        'Tracking latar belakang belum bisa dinyalakan. Aktifkan izin lokasi latar belakang dari Pengaturan Aplikasi, izinkan notifikasi, lalu coba lagi.',
       );
     }
 
@@ -405,15 +444,16 @@ export async function isTrackingRunning(): Promise<boolean> {
   return BackgroundService.isRunning();
 }
 
-export async function bootstrapTrackingAfterLogin(): Promise<TrackingPermissionSummary> {
-  const summary = await requestTrackingPermissions();
-  if (!summary.ready) {
-    await deviceStore.setTrackingEnabled(false);
-    return summary;
+export async function bootstrapTrackingAfterLogin(): Promise<AppEntryPermissionSummary> {
+  const appSummary = await requestAppEntryPermissions();
+  await deviceStore.setTrackingEnabled(false);
+
+  if (!appSummary.ready) {
+    return appSummary;
   }
 
-  await deviceStore.setTrackingEnabled(true);
-  return summary;
+  await syncDeviceSnapshot().catch(() => {});
+  return appSummary;
 }
 
 export async function resumeTrackingIfEnabled() {
@@ -424,6 +464,7 @@ export async function resumeTrackingIfEnabled() {
 
   const summary = await getTrackingPermissionSummary();
   if (!summary.ready) {
+    await deviceStore.setTrackingEnabled(false);
     return false;
   }
 

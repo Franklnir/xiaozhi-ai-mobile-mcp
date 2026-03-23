@@ -21,7 +21,13 @@ import {
   DeviceInfo,
 } from '../api/client';
 import { deviceStore } from '../stores/deviceStore';
-import { registerDevice, sendHeartbeat, startTracking, stopTracking } from '../services/deviceService';
+import {
+  isTrackingRunning,
+  sendHeartbeat,
+  startTracking,
+  stopTracking,
+  syncDeviceSnapshot,
+} from '../services/deviceService';
 
 export default function DevicesScreen() {
   const { theme } = useTheme();
@@ -63,11 +69,12 @@ export default function DevicesScreen() {
     (async () => {
       try {
         setBootError('');
-        const reg = await registerDevice();
+        const reg = await syncDeviceSnapshot();
         if (!active) return;
         setDeviceId(reg.device_id);
         setDeviceToken(reg.device_token);
-        const enabled = await deviceStore.isTrackingEnabled();
+        const enabled = await isTrackingRunning();
+        await deviceStore.setTrackingEnabled(enabled);
         if (!active) return;
         setTrackingEnabled(enabled);
         await loadDevices();
