@@ -1,6 +1,6 @@
 {
   "name": "scig-mode-mcp-mobile",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
     "android": "react-native run-android",

@@ -35,6 +35,10 @@ export default function DeviceDetailScreen() {
   }
 
   const addr = device?.address_full || [device?.address_street, device?.address_area, device?.address_city].filter(Boolean).join(', ');
+  const isOnline = !!device?.is_online;
+  const lastSeen = device?.last_seen_at
+    ? new Date(device.last_seen_at).toLocaleString('id-ID')
+    : 'Belum ada sinkron terbaru';
 
   return (
     <View style={styles.container}>
@@ -57,9 +61,15 @@ export default function DeviceDetailScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Alamat</Text>
+          <View style={styles.rowBetween}>
+            <Text style={styles.cardTitle}>Alamat</Text>
+            <View style={[styles.statusPill, isOnline ? styles.statusOnline : styles.statusOffline]}>
+              <Text style={styles.statusPillText}>{isOnline ? 'Online' : 'Offline'}</Text>
+            </View>
+          </View>
           <Text style={styles.value}>{addr || '-'}</Text>
-          <Text style={styles.meta}>Lat/Lon: {device?.latitude || '-'} / {device?.longitude || '-'}</Text>
+          <Text style={styles.meta}>Update terakhir: {lastSeen}</Text>
+          <Text style={styles.meta}>Koordinat mentah disembunyikan. Lokasi ditampilkan sebagai alamat detail.</Text>
         </View>
 
         <View style={styles.card}>
@@ -89,6 +99,12 @@ const createStyles = (theme: Theme) =>
       ...theme.effects.cardShadow,
     },
     cardTitle: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, marginBottom: 8, fontFamily: theme.fonts.body },
+    rowBetween: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
     input: {
       backgroundColor: theme.colors.surfaceLight,
       borderRadius: theme.radius.md,
@@ -107,6 +123,26 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
     },
     btnText: { color: theme.colors.white, fontWeight: '700' },
+    statusPill: {
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: theme.radius.full,
+      borderWidth: theme.isNeo ? 2 : 1,
+    },
+    statusOnline: {
+      backgroundColor: theme.isNeo ? '#dcfce7' : 'rgba(16,185,129,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(16,185,129,0.24)',
+    },
+    statusOffline: {
+      backgroundColor: theme.isNeo ? '#fef3c7' : 'rgba(245,158,11,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(245,158,11,0.24)',
+    },
+    statusPillText: {
+      color: theme.colors.text,
+      fontSize: 11,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
     value: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontFamily: theme.fonts.body },
     meta: { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, marginTop: 4, fontFamily: theme.fonts.body },
   });

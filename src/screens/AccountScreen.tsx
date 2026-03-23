@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   View,
   Text,
   TouchableOpacity,
@@ -14,7 +15,15 @@ import { APP_PUBLIC_NAME } from '../config/appConfig';
 import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
 import { deviceStore } from '../stores/deviceStore';
-import { stopTracking } from '../services/deviceService';
+import {
+  activateBackgroundMonitoring,
+  getTrackingPermissionSummary,
+  isTrackingRunning,
+  openAppSettings,
+  stopTracking,
+  TRACKING_INTERVAL_LABEL,
+  TrackingPermissionSummary,
+} from '../services/deviceService';
 import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig, apiGetPublicSettings, SocialLink } from '../api/client';
 
 export default function AccountScreen() {
@@ -25,6 +34,10 @@ export default function AccountScreen() {
   const [languages, setLanguages] = useState<string[]>([]);
   const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
   const [saving, setSaving] = useState(false);
+  const [trackingSummary, setTrackingSummary] = useState<TrackingPermissionSummary | null>(null);
+  const [trackingRunning, setTrackingRunning] = useState(false);
+  const [trackingBusy, setTrackingBusy] = useState(false);
+  const [pendingBackgroundActivation, setPendingBackgroundActivation] = useState(false);
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -57,6 +70,20 @@ export default function AccountScreen() {
     { key: 'neo', label: 'Neo Brutalism' },
   ];
 
+  const refreshBackgroundState = useCallback(async () => {
+    try {
+      const [summary, running] = await Promise.all([
+        getTrackingPermissionSummary(),
+        isTrackingRunning(),
+      ]);
+      setTrackingSummary(summary);
+      setTrackingRunning(running);
+      return { summary, running };
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     (async () => {
       const url = await authStore.getServerUrl();
@@ -74,8 +101,9 @@ export default function AccountScreen() {
       } catch (e) {
         // ignore
       }
+      await refreshBackgroundState();
     })();
-  }, []);
+  }, [refreshBackgroundState]);
 
   async function saveLanguage() {
     setSaving(true);
@@ -88,11 +116,90 @@ export default function AccountScreen() {
     setSaving(false);
   }
 
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (state) => {
+      if (state !== 'active') {
+        return;
+      }
+
+      const info = await refreshBackgroundState();
+      if (!pendingBackgroundActivation || !info?.summary.ready || info.running) {
+        if (pendingBackgroundActivation && info?.running) {
+          setPendingBackgroundActivation(false);
+        }
+        return;
+      }
+
+      setTrackingBusy(true);
+      try {
+        const activated = await activateBackgroundMonitoring();
+        setTrackingSummary(activated.summary);
+        setTrackingRunning(activated.trackingEnabled);
+        if (activated.trackingEnabled) {
+          setPendingBackgroundActivation(false);
+          Alert.alert('Aktif', 'Monitor latar belakang sudah aktif dan notif status akan tampil di atas layar.');
+        }
+      } catch {
+        // ignore refresh-time activation errors
+      } finally {
+        setTrackingBusy(false);
+      }
+    });
+
+    return () => sub.remove();
+  }, [pendingBackgroundActivation, refreshBackgroundState]);
+
+  async function handleBackgroundMonitor() {
+    setTrackingBusy(true);
+    try {
+      if (trackingRunning) {
+        await stopTracking();
+        setPendingBackgroundActivation(false);
+        await refreshBackgroundState();
+        return;
+      }
+
+      const result = await activateBackgroundMonitoring();
+      setTrackingSummary(result.summary);
+      setTrackingRunning(result.trackingEnabled);
+
+      if (result.trackingEnabled) {
+        setPendingBackgroundActivation(false);
+        Alert.alert('Aktif', `Monitor latar belakang aktif. Data HP akan dikirim tiap ${TRACKING_INTERVAL_LABEL}.`);
+        return;
+      }
+
+      if (result.openedSettings) {
+        setPendingBackgroundActivation(true);
+        Alert.alert(
+          'Lanjutkan di Pengaturan',
+          'Aktifkan izin lokasi di latar belakang dari halaman Pengaturan Aplikasi, lalu kembali ke aplikasi. Setelah izin aktif, monitor akan dinyalakan otomatis.',
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Izin belum lengkap',
+        `Yang masih kurang: ${result.summary.missing.join(', ') || 'cek lagi izin perangkat Anda.'}`,
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Gagal mengaktifkan monitor latar belakang.');
+    } finally {
+      setTrackingBusy(false);
+    }
+  }
+
   async function handleLogout() {
     await stopTracking().catch(() => {});
     await authStore.clear();
     await deviceStore.clear();
   }
+
+  const backgroundStatusText = trackingRunning
+    ? `Monitor aktif. Data HP berjalan di background dan sinkron tiap ${TRACKING_INTERVAL_LABEL}.`
+    : trackingSummary?.ready
+    ? 'Semua izin sudah siap. Tekan tombol aktifkan untuk menyalakan monitor background.'
+    : 'Izin background belum lengkap. Aktifkan dari sini agar tidak perlu memicu flow izin saat login.';
 
   return (
     <View style={styles.container}>
@@ -109,6 +216,55 @@ export default function AccountScreen() {
             <View style={styles.backendBox}>
               <Text style={styles.backendValue}>{backendUrl}</Text>
               <Text style={styles.backendHint}>User akhir tidak perlu input URL server manual dari layar akun.</Text>
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.monitorHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Monitor Latar Belakang</Text>
+                <Text style={styles.cardSubtitle}>
+                  Aktifkan izin background dari sini. Setelah aktif, notif Android akan menampilkan status online atau offline.
+                </Text>
+              </View>
+              <View style={[styles.monitorPill, trackingRunning ? styles.monitorPillOn : styles.monitorPillOff]}>
+                <Text style={styles.monitorPillText}>{trackingRunning ? 'ON' : 'OFF'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.monitorInfoBox}>
+              <Text style={styles.monitorInfoText}>{backgroundStatusText}</Text>
+            </View>
+
+            <View style={styles.permissionGrid}>
+              <View style={[styles.permissionChip, trackingSummary?.locationGranted ? styles.permissionChipOn : styles.permissionChipOff]}>
+                <Text style={styles.permissionChipText}>Lokasi</Text>
+              </View>
+              <View style={[styles.permissionChip, trackingSummary?.backgroundGranted ? styles.permissionChipOn : styles.permissionChipOff]}>
+                <Text style={styles.permissionChipText}>Latar Belakang</Text>
+              </View>
+              <View style={[styles.permissionChip, trackingSummary?.notificationsGranted ? styles.permissionChipOn : styles.permissionChipOff]}>
+                <Text style={styles.permissionChipText}>Notifikasi</Text>
+              </View>
+            </View>
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.saveBtn, trackingRunning ? styles.monitorStopBtn : styles.saveBtnGreen]}
+                onPress={handleBackgroundMonitor}
+                disabled={trackingBusy}
+              >
+                <Text style={styles.saveBtnText}>
+                  {trackingBusy
+                    ? 'Memproses...'
+                    : trackingRunning
+                    ? 'Matikan Monitor'
+                    : 'Aktifkan Izin di Latar Belakang'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryActionBtn} onPress={openAppSettings}>
+                <Text style={styles.secondaryActionText}>Buka Pengaturan App</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -277,6 +433,72 @@ const createStyles = (theme: Theme) =>
       lineHeight: 18,
       fontFamily: theme.fonts.body,
     },
+    monitorHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: theme.spacing.sm,
+    },
+    monitorPill: {
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: theme.radius.full,
+      borderWidth: theme.isNeo ? 2 : 1,
+    },
+    monitorPillOn: {
+      backgroundColor: theme.isNeo ? '#dcfce7' : 'rgba(16,185,129,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(16,185,129,0.25)',
+    },
+    monitorPillOff: {
+      backgroundColor: theme.isNeo ? '#fef3c7' : 'rgba(245,158,11,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(245,158,11,0.25)',
+    },
+    monitorPillText: {
+      color: theme.colors.text,
+      fontWeight: '700',
+      fontSize: 11,
+      fontFamily: theme.fonts.body,
+    },
+    monitorInfoBox: {
+      marginTop: theme.spacing.md,
+      padding: theme.spacing.sm,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.isNeo ? '#fff7ed' : 'rgba(59,130,246,0.08)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(59,130,246,0.16)',
+    },
+    monitorInfoText: {
+      color: theme.colors.textSecondary,
+      fontSize: theme.fontSize.xs,
+      lineHeight: 18,
+      fontFamily: theme.fonts.body,
+    },
+    permissionGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.sm,
+      marginTop: theme.spacing.md,
+    },
+    permissionChip: {
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 8,
+      borderRadius: theme.radius.full,
+      borderWidth: theme.isNeo ? 2 : 1,
+    },
+    permissionChipOn: {
+      backgroundColor: theme.isNeo ? '#dcfce7' : 'rgba(16,185,129,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(16,185,129,0.25)',
+    },
+    permissionChipOff: {
+      backgroundColor: theme.isNeo ? '#fee2e2' : 'rgba(239,68,68,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(239,68,68,0.25)',
+    },
+    permissionChipText: {
+      color: theme.colors.text,
+      fontSize: 11,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
     input: {
       marginTop: theme.spacing.md,
       backgroundColor: theme.colors.surfaceLight,
@@ -296,8 +518,26 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
     },
     saveBtnGreen: { backgroundColor: theme.colors.emerald },
+    monitorStopBtn: { backgroundColor: theme.colors.red },
     saveBtnText: {
       color: theme.colors.white,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
+    actionRow: {
+      marginTop: theme.spacing.md,
+      gap: theme.spacing.sm,
+    },
+    secondaryActionBtn: {
+      backgroundColor: theme.colors.surfaceLight,
+      paddingVertical: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+    },
+    secondaryActionText: {
+      color: theme.colors.text,
       fontWeight: '700',
       fontFamily: theme.fonts.body,
     },

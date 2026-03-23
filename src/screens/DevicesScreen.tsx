@@ -27,7 +27,28 @@ import {
   startTracking,
   stopTracking,
   syncDeviceSnapshot,
+  TRACKING_INTERVAL_LABEL,
+  TRACKING_INTERVAL_MS,
 } from '../services/deviceService';
+
+function formatDeviceAddress(device?: DeviceInfo | null) {
+  return (
+    device?.address_full ||
+    [device?.address_street, device?.address_area, device?.address_city].filter(Boolean).join(', ') ||
+    'Alamat belum tersedia'
+  );
+}
+
+function formatSeenAt(value?: string) {
+  if (!value) {
+    return 'Belum ada sinkron terbaru';
+  }
+  try {
+    return new Date(value).toLocaleString('id-ID');
+  } catch {
+    return value;
+  }
+}
 
 export default function DevicesScreen() {
   const { theme } = useTheme();
@@ -42,6 +63,7 @@ export default function DevicesScreen() {
   const [manualAlias, setManualAlias] = useState('');
   const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [bootError, setBootError] = useState('');
+  const [pageScrollEnabled, setPageScrollEnabled] = useState(true);
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -96,7 +118,7 @@ export default function DevicesScreen() {
   useEffect(() => {
     const timer = setInterval(() => {
       loadDevices().catch(() => {});
-    }, 10000);
+    }, TRACKING_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [loadDevices]);
 
@@ -109,6 +131,7 @@ export default function DevicesScreen() {
         await startTracking();
         setTrackingEnabled(true);
       }
+      await loadDevices();
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Gagal mengubah tracking');
     }
@@ -152,12 +175,13 @@ export default function DevicesScreen() {
 
   const mapHtml = useMemo(() => {
     const markers = devices
-      .filter((d) => d.latitude && d.longitude)
+      .filter((d) => d.latitude != null && d.longitude != null)
       .map((d) => ({
         name: d.alias || d.device_name || d.device_id,
         lat: d.latitude,
         lon: d.longitude,
-        addr: d.address_full || [d.address_street, d.address_area, d.address_city].filter(Boolean).join(', '),
+        addr: formatDeviceAddress(d),
+        status: d.is_online ? 'Online' : 'Offline',
       }));
 
     return `
@@ -175,18 +199,28 @@ export default function DevicesScreen() {
           <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
           <script>
             const devices = ${JSON.stringify(markers)};
-            const map = L.map('map').setView([0,0], 2);
+            const map = L.map('map', {
+              zoomControl: true,
+              dragging: true,
+              scrollWheelZoom: true,
+              doubleClickZoom: true,
+              touchZoom: true,
+              boxZoom: true
+            }).setView([0,0], 2);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
               attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
+            L.control.scale({ imperial: false }).addTo(map);
             if (devices.length) {
               const group = [];
               devices.forEach(d => {
-                const m = L.marker([d.lat, d.lon]).addTo(map).bindPopup('<b>' + d.name + '</b><br>' + (d.addr || '-'));
+                const m = L.marker([d.lat, d.lon]).addTo(map).bindPopup(
+                  '<b>' + d.name + '</b><br>' + (d.addr || '-') + '<br><span style="color:#475569;font-size:12px;">' + d.status + '</span>'
+                );
                 group.push(m);
               });
               const bounds = L.featureGroup(group).getBounds();
-              map.fitBounds(bounds.pad(0.2));
+              map.fitBounds(bounds.pad(0.2), { maxZoom: 16 });
             }
           </script>
         </body>
@@ -195,6 +229,7 @@ export default function DevicesScreen() {
   }, [devices]);
 
   const myDevice = devices.find((d) => d.device_id === deviceId);
+  const myDeviceOnline = !!myDevice?.is_online;
 
   const animStyle = {
     opacity: enterAnim,
@@ -207,11 +242,13 @@ export default function DevicesScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView>
+      <ScrollView scrollEnabled={pageScrollEnabled}>
         <Animated.View style={animStyle}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Perangkat Saya</Text>
-            <Text style={styles.headerSubtitle}>Update tiap 10 detik</Text>
+            <Text style={styles.headerSubtitle}>
+              Snapshot lokasi dan data HP disinkronkan tiap {TRACKING_INTERVAL_LABEL}
+            </Text>
           </View>
 
           {bootError ? (
@@ -222,18 +259,33 @@ export default function DevicesScreen() {
           ) : null}
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Perangkat Utama</Text>
-            <Text style={styles.cardValue}>{deviceId || '-'}</Text>
-            <Text style={styles.cardMeta}>{myDevice?.address_full || 'Alamat belum tersedia'}</Text>
+            <View style={styles.cardTopRow}>
+              <View>
+                <Text style={styles.cardTitle}>Perangkat Utama</Text>
+                <Text style={styles.cardValue}>{deviceId || '-'}</Text>
+              </View>
+              <View style={[styles.statusPill, myDeviceOnline ? styles.statusOnlinePill : styles.statusOfflinePill]}>
+                <Text style={styles.statusPillText}>{myDeviceOnline ? 'Online' : 'Offline'}</Text>
+              </View>
+            </View>
+            <Text style={styles.cardMeta}>{formatDeviceAddress(myDevice)}</Text>
+            <Text style={styles.cardMeta}>Update terakhir: {formatSeenAt(myDevice?.last_seen_at)}</Text>
             <Text style={styles.cardMeta}>
               Baterai: {myDevice?.battery_level ?? '-'}% • {myDevice?.battery_status || '-'}
             </Text>
             <Text style={styles.cardMeta}>
               Jaringan: {myDevice?.network_type || '-'} / {myDevice?.carrier || '-'}
             </Text>
+            <View style={styles.infoBanner}>
+              <Text style={styles.infoBannerText}>
+                Izin background sekarang dipisah ke menu Akun & Pengaturan supaya flow izin lebih stabil dan tidak bikin force close.
+              </Text>
+            </View>
             <View style={styles.btnRow}>
               <TouchableOpacity style={styles.secondaryBtn} onPress={toggleTracking}>
-                <Text style={styles.btnText}>{trackingEnabled ? 'Stop Tracking' : 'Start Tracking'}</Text>
+                <Text style={styles.secondaryBtnText}>
+                  {trackingEnabled ? 'Matikan Monitor' : 'Aktifkan Monitor'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.primaryBtn} onPress={manualHeartbeat}>
                 <Text style={styles.btnText}>Sync Now</Text>
@@ -280,7 +332,7 @@ export default function DevicesScreen() {
                 style={styles.secondaryBtn}
                 onPress={() => navigation.navigate('QrScanner' as never)}
               >
-                <Text style={styles.btnText}>Scan QR</Text>
+                <Text style={styles.secondaryBtnText}>Scan QR</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.primaryBtn} onPress={claimToken}>
                 <Text style={styles.btnText}>Tambah</Text>
@@ -290,8 +342,20 @@ export default function DevicesScreen() {
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Peta Lokasi</Text>
-            <View style={styles.mapBox}>
-              <WebView originWhitelist={['*']} source={{ html: mapHtml }} />
+            <Text style={styles.cardMeta}>Geser peta untuk pantau lokasi, cubit untuk zoom, dan tap marker untuk lihat alamat detail.</Text>
+            <View
+              style={styles.mapBox}
+              onTouchStart={() => setPageScrollEnabled(false)}
+              onTouchEnd={() => setPageScrollEnabled(true)}
+              onTouchCancel={() => setPageScrollEnabled(true)}
+            >
+              <WebView
+                originWhitelist={['*']}
+                source={{ html: mapHtml }}
+                javaScriptEnabled
+                domStorageEnabled
+                nestedScrollEnabled
+              />
             </View>
           </View>
 
@@ -308,7 +372,7 @@ export default function DevicesScreen() {
                 >
                   <View>
                     <Text style={styles.deviceName}>{d.alias || d.device_name || d.device_id}</Text>
-                    <Text style={styles.deviceMeta}>{d.address_full || '-'}</Text>
+                    <Text style={styles.deviceMeta}>{formatDeviceAddress(d)}</Text>
                   </View>
                   <Text style={[styles.deviceStatus, d.is_online ? styles.online : styles.offline]}>
                     {d.is_online ? 'Online' : 'Offline'}
@@ -384,6 +448,12 @@ const createStyles = (theme: Theme) =>
       fontFamily: theme.fonts.body,
       marginBottom: 8,
     },
+    cardTopRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: theme.spacing.sm,
+    },
     cardValue: {
       fontSize: theme.fontSize.md,
       fontWeight: '700',
@@ -417,6 +487,41 @@ const createStyles = (theme: Theme) =>
       borderColor: theme.colors.panelBorder,
     },
     btnText: { color: theme.colors.white, fontWeight: '700', fontFamily: theme.fonts.body },
+    secondaryBtnText: { color: theme.colors.text, fontWeight: '700', fontFamily: theme.fonts.body },
+    statusPill: {
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: theme.radius.full,
+      borderWidth: theme.isNeo ? 2 : 1,
+    },
+    statusOnlinePill: {
+      backgroundColor: theme.isNeo ? '#dcfce7' : 'rgba(16,185,129,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(16,185,129,0.25)',
+    },
+    statusOfflinePill: {
+      backgroundColor: theme.isNeo ? '#fef3c7' : 'rgba(245,158,11,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(245,158,11,0.25)',
+    },
+    statusPillText: {
+      color: theme.colors.text,
+      fontSize: 11,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
+    infoBanner: {
+      marginTop: theme.spacing.md,
+      padding: theme.spacing.sm,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.isNeo ? '#fff7ed' : 'rgba(59,130,246,0.08)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(59,130,246,0.18)',
+    },
+    infoBannerText: {
+      color: theme.colors.textSecondary,
+      fontSize: theme.fontSize.xs,
+      lineHeight: 18,
+      fontFamily: theme.fonts.body,
+    },
     qrBox: { alignItems: 'center', marginTop: theme.spacing.md },
     qrText: { marginTop: theme.spacing.sm, color: theme.colors.text, fontFamily: theme.fonts.mono, fontSize: 12 },
     qrMeta: { marginTop: 4, color: theme.colors.textMuted, fontSize: 11 },
@@ -430,7 +535,7 @@ const createStyles = (theme: Theme) =>
       borderColor: theme.colors.panelBorder,
       fontFamily: theme.fonts.body,
     },
-    mapBox: { height: 240, borderRadius: theme.radius.lg, overflow: 'hidden' },
+    mapBox: { height: 300, borderRadius: theme.radius.lg, overflow: 'hidden', marginTop: theme.spacing.md },
     muted: { color: theme.colors.textMuted, fontFamily: theme.fonts.body },
     deviceRow: {
       flexDirection: 'row',
@@ -442,7 +547,7 @@ const createStyles = (theme: Theme) =>
     },
     deviceName: { fontSize: theme.fontSize.sm, color: theme.colors.text, fontFamily: theme.fonts.heading },
     deviceMeta: { fontSize: theme.fontSize.xs, color: theme.colors.textMuted, fontFamily: theme.fonts.body },
-    deviceStatus: { fontSize: theme.fontSize.xs, fontWeight: '700' },
+    deviceStatus: { fontSize: theme.fontSize.xs, fontWeight: '700', fontFamily: theme.fonts.body },
     online: { color: theme.colors.emerald },
-    offline: { color: theme.colors.red },
+    offline: { color: theme.colors.amberDark },
   });

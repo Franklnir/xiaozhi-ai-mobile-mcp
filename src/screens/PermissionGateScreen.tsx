@@ -28,7 +28,7 @@ function buildHint(summary: AppEntryPermissionSummary | null): string {
   if (!summary || summary.ready) {
     return '';
   }
-  return `Aplikasi butuh izin ini dulu supaya data HP bisa dibaca dengan aman: ${summary.missing.join(', ')}. Tracking background bisa diaktifkan nanti dari menu Perangkat.`;
+  return `Aplikasi butuh izin ini dulu supaya data HP bisa dibaca dengan aman: ${summary.missing.join(', ')}. Tracking background bisa diaktifkan nanti dari menu Akun & Pengaturan.`;
 }
 
 export default function PermissionGateScreen({ onReady }: PermissionGateScreenProps) {
@@ -124,7 +124,7 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
       <Animated.View style={[styles.card, animStyle]}>
         <Text style={styles.title}>Aktifkan Izin Perangkat</Text>
         <Text style={styles.subtitle}>
-          Supaya aplikasi stabil, kita minta izin lokasi dulu untuk membaca data HP. Tracking background tidak langsung dinyalakan saat login dan bisa Anda aktifkan nanti dari menu Perangkat.
+          Supaya aplikasi stabil, kita minta izin lokasi dulu untuk membaca data HP. Tracking background tidak langsung dinyalakan saat login dan bisa Anda aktifkan nanti dari menu Akun & Pengaturan.
         </Text>
 
         <View style={styles.statusBox}>

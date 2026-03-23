@@ -29,6 +29,19 @@ import {
 import { deviceStore } from '../stores/deviceStore';
 import { registerDevice } from '../services/deviceService';
 
+const PROMPT_PREVIEW_DEBOUNCE_MS = 350;
+const DEVICE_LIVE_TEMPLATE = [
+  'PERAN: Asisten monitoring perangkat yang fokus pada data HP terbaru.',
+  'KONTEKS PERANGKAT (snapshot maksimal 5 menit sekali):',
+  '{device_status}',
+  '',
+  'ATURAN:',
+  '- Jika user tanya lokasi, jawab pakai alamat detail terbaru, bukan koordinat mentah.',
+  '- Jika user tanya status HP (baterai/jaringan), jawab pakai data terbaru.',
+  '- Jika data kosong/unknown, jelaskan belum ada data terbaru.',
+  '- Jawab singkat, jelas, dan bisa dibacakan.',
+].join('\n');
+
 export default function ModeEditorScreen() {
   const { theme } = useTheme();
   const [modes, setModes] = useState<ModeInfo[]>([]);
@@ -46,6 +59,7 @@ export default function ModeEditorScreen() {
   const [tokenTest, setTokenTest] = useState<{ status: 'idle' | 'testing' | 'ok' | 'error'; message?: string }>({
     status: 'idle',
   });
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -100,28 +114,79 @@ export default function ModeEditorScreen() {
   }, [loadModes, loadCodes]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    setTokenInput('');
+    setTokenTest({ status: 'idle' });
+  }, [activeCodeId]);
+
+  useEffect(() => {
+    if (!selectedMode) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
       updatePreview().catch(() => {});
-    }, 10000);
-    return () => clearInterval(timer);
-  }, [name, title, intro, source, target, deviceId]);
+    }, PROMPT_PREVIEW_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [selectedMode, title, intro, source, target, deviceId]);
 
   function selectMode(mode: ModeInfo) {
     setSelectedMode(mode);
     setName(mode.name);
     setTitle(mode.title);
-    setIntro(mode.introduction);
-    setTimeout(() => {
-      updatePreview().catch(() => {});
-    }, 200);
+    if (mode.name === 'device_live' && /update 30 detik|real-time/i.test(mode.introduction || '')) {
+      setIntro(DEVICE_LIVE_TEMPLATE);
+    } else {
+      setIntro(mode.introduction);
+    }
   }
 
   async function updatePreview() {
-    const res = await apiRenderPrompt(selectedMode?.id || null, { source, target }, deviceId || undefined);
-    setPreview(res.prompt || '');
+    if (!selectedMode) {
+      setPreview('');
+      return;
+    }
+
+    setPreviewLoading(true);
+    try {
+      const res = await apiRenderPrompt(
+        selectedMode.id || null,
+        { source, target },
+        deviceId || undefined,
+        {
+          title,
+          introduction: intro,
+        },
+      );
+      setPreview(res.prompt || '');
+    } catch (e: any) {
+      setPreview(`Error: ${e.message || 'Gagal merender prompt.'}`);
+    } finally {
+      setPreviewLoading(false);
+    }
   }
 
   const activeCode = mcpCodes.find((c) => c.id === activeCodeId) || null;
+  const hasSavedToken = !!activeCode?.has_token;
+  const canSaveToken = tokenTest.status === 'ok' && !!tokenInput.trim() && !hasSavedToken;
+  const tokenStatusTone: 'neutral' | 'success' | 'danger' | 'warning' =
+    tokenTest.status === 'ok'
+      ? 'success'
+      : tokenTest.status === 'error'
+      ? 'danger'
+      : hasSavedToken
+      ? 'warning'
+      : 'neutral';
+  const tokenStatusText =
+    tokenTest.status === 'testing'
+      ? 'Sedang cek koneksi token...'
+      : tokenTest.status === 'ok'
+      ? 'Token terkoneksi dan siap disimpan.'
+      : tokenTest.status === 'error'
+      ? `Token gagal konek: ${tokenTest.message || 'Periksa URL / token MCP.'}`
+      : hasSavedToken
+      ? 'Token aktif sudah tersimpan. Hapus token dulu kalau ingin mengganti.'
+      : 'Belum dites.';
 
   async function testToken() {
     if (!tokenInput.trim()) {
@@ -170,6 +235,7 @@ export default function ModeEditorScreen() {
     try {
       await apiClearMyMcpToken(activeCodeId);
       Alert.alert('OK', 'Token dihapus.');
+      setTokenInput('');
       setTokenTest({ status: 'idle' });
       loadCodes().catch(() => {});
     } catch (e: any) {
@@ -220,7 +286,9 @@ export default function ModeEditorScreen() {
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Token MCP (User)</Text>
-            <Text style={styles.cardSubtitle}>Satu token hanya untuk satu akun. Test koneksi dulu sebelum simpan.</Text>
+            <Text style={styles.cardSubtitle}>
+              Cek koneksi dulu sebelum simpan. Kalau sudah ada token aktif, hapus dulu supaya penggantian aman.
+            </Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
               {mcpCodes.length === 0 ? (
@@ -238,7 +306,7 @@ export default function ModeEditorScreen() {
                       <Text style={[styles.codeChipText, active && styles.codeChipTextActive]}>
                         {c.code}
                       </Text>
-                      <Text style={styles.codeChipSub}>
+                      <Text style={[styles.codeChipSub, connected ? styles.statusTextSuccess : styles.statusTextDanger]}>
                         {connected ? 'Connected' : 'Offline'}
                       </Text>
                     </TouchableOpacity>
@@ -248,10 +316,16 @@ export default function ModeEditorScreen() {
             </ScrollView>
 
             {activeCode ? (
-              <Text style={styles.mutedText}>
-                Status: {activeCode.is_connected ? 'Connected' : 'Not connected'}
-                {activeCode.last_err_at ? ` • last_err ${activeCode.last_err_at}` : ''}
-              </Text>
+              <View style={styles.inlineMetaRow}>
+                <View style={[styles.statePill, activeCode.is_connected ? styles.statePillSuccess : styles.statePillDanger]}>
+                  <Text style={styles.statePillText}>
+                    {activeCode.is_connected ? 'Hijau: terkoneksi' : 'Merah: belum konek'}
+                  </Text>
+                </View>
+                <Text style={styles.mutedText}>
+                  {activeCode.last_err_at ? `Error terakhir: ${activeCode.last_err_at}` : 'Token disembunyikan demi keamanan.'}
+                </Text>
+              </View>
             ) : null}
 
             <TextInput
@@ -267,23 +341,42 @@ export default function ModeEditorScreen() {
               autoCorrect={false}
             />
 
-            <View style={styles.statusRow}>
-              <Text style={styles.statusLabel}>
-                {tokenTest.status === 'testing'
-                  ? 'Testing...'
-                  : tokenTest.status === 'ok'
-                  ? 'Connected'
-                  : tokenTest.status === 'error'
-                  ? `Error: ${tokenTest.message || ''}`
-                  : 'Belum dites'}
-              </Text>
+            <View
+              style={[
+                styles.statusRow,
+                tokenStatusTone === 'success'
+                  ? styles.statusRowSuccess
+                  : tokenStatusTone === 'danger'
+                  ? styles.statusRowDanger
+                  : tokenStatusTone === 'warning'
+                  ? styles.statusRowWarning
+                  : undefined,
+              ]}
+            >
+              <View
+                style={[
+                  styles.statusDot,
+                  tokenStatusTone === 'success'
+                    ? styles.statusDotSuccess
+                    : tokenStatusTone === 'danger'
+                    ? styles.statusDotDanger
+                    : tokenStatusTone === 'warning'
+                    ? styles.statusDotWarning
+                    : undefined,
+                ]}
+              />
+              <Text style={styles.statusLabel}>{tokenStatusText}</Text>
             </View>
 
             <View style={styles.btnRow}>
               <TouchableOpacity style={styles.secondaryBtn} onPress={testToken}>
-                <Text style={styles.btnText}>Test Connect</Text>
+                <Text style={styles.secondaryBtnText}>Cek Koneksi</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={saveToken}>
+              <TouchableOpacity
+                style={[styles.primaryBtn, !canSaveToken && styles.disabledBtn]}
+                onPress={saveToken}
+                disabled={!canSaveToken}
+              >
                 <Text style={styles.btnText}>Simpan Token</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.dangerBtn} onPress={clearToken}>
@@ -311,9 +404,28 @@ export default function ModeEditorScreen() {
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Nama & Judul</Text>
-            <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="mode_name" placeholderTextColor={theme.colors.textMuted} />
-            <TextInput style={[styles.input, { marginTop: 10 }]} value={title} onChangeText={setTitle} placeholder="Judul mode" placeholderTextColor={theme.colors.textMuted} />
-            <Text style={[styles.cardTitle, { marginTop: 12 }]}>Introduction</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="mode_name"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <TextInput
+              style={[styles.input, { marginTop: 10 }]}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Judul mode"
+              placeholderTextColor={theme.colors.textMuted}
+            />
+            <View style={styles.introHeaderRow}>
+              <Text style={[styles.cardTitle, { marginTop: 12, marginBottom: 0 }]}>Introduction</Text>
+              {selectedMode?.name === 'device_live' ? (
+                <TouchableOpacity style={styles.templateBtn} onPress={() => setIntro(DEVICE_LIVE_TEMPLATE)}>
+                  <Text style={styles.templateBtnText}>Template 5 Menit</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={intro}
@@ -325,17 +437,22 @@ export default function ModeEditorScreen() {
             />
             <View style={styles.btnRow}>
               <TouchableOpacity style={styles.secondaryBtn} onPress={applyActiveMode}>
-                <Text style={styles.btnText}>Apply Mode</Text>
+                <Text style={styles.secondaryBtnText}>Apply Mode</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.primaryBtn} onPress={saveMode}>
                 <Text style={styles.btnText}>Simpan</Text>
               </TouchableOpacity>
             </View>
-          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Rendered System Prompt (Live)</Text>
-            <Text style={styles.preview}>{preview || '-'}</Text>
+            <View style={styles.previewWrap}>
+              <View style={styles.previewHeader}>
+                <Text style={styles.previewTitle}>Rendered System Prompt (Live)</Text>
+                <Text style={styles.previewHint}>
+                  {previewLoading ? 'Memuat...' : 'Preview ini mengikuti edit introduction secara langsung.'}
+                </Text>
+              </View>
+              <Text style={styles.preview}>{preview || '-'}</Text>
+            </View>
           </View>
 
           <View style={{ height: 40 }} />
@@ -396,6 +513,31 @@ const createStyles = (theme: Theme) =>
       fontFamily: theme.fonts.body,
       marginTop: 6,
     },
+    inlineMetaRow: {
+      marginTop: theme.spacing.xs,
+      gap: theme.spacing.sm,
+    },
+    statePill: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: theme.radius.full,
+      borderWidth: theme.isNeo ? 2 : 1,
+    },
+    statePillSuccess: {
+      backgroundColor: theme.isNeo ? '#dcfce7' : 'rgba(16,185,129,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(16,185,129,0.3)',
+    },
+    statePillDanger: {
+      backgroundColor: theme.isNeo ? '#fee2e2' : 'rgba(239,68,68,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(239,68,68,0.3)',
+    },
+    statePillText: {
+      fontSize: 10,
+      color: theme.colors.text,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
     codeChip: {
       backgroundColor: theme.colors.surfaceLight,
       borderRadius: theme.radius.full,
@@ -422,9 +564,11 @@ const createStyles = (theme: Theme) =>
     },
     codeChipSub: {
       fontSize: 10,
-      color: theme.colors.textMuted,
       marginTop: 2,
+      fontFamily: theme.fonts.body,
     },
+    statusTextSuccess: { color: theme.colors.emeraldDark },
+    statusTextDanger: { color: theme.colors.redDark },
     input: {
       backgroundColor: theme.colors.surfaceLight,
       borderRadius: theme.radius.md,
@@ -451,6 +595,9 @@ const createStyles = (theme: Theme) =>
       borderRadius: theme.radius.md,
       alignItems: 'center',
     },
+    disabledBtn: {
+      opacity: 0.45,
+    },
     secondaryBtn: {
       flex: 1,
       backgroundColor: theme.colors.surfaceLight,
@@ -474,18 +621,92 @@ const createStyles = (theme: Theme) =>
       fontWeight: '700',
       fontFamily: theme.fonts.body,
     },
+    secondaryBtnText: {
+      color: theme.colors.text,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
     statusRow: {
       marginTop: theme.spacing.sm,
-      paddingVertical: 6,
-      paddingHorizontal: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 10,
       borderRadius: theme.radius.md,
       backgroundColor: theme.colors.surfaceLight,
       borderWidth: theme.isNeo ? 2 : 1,
       borderColor: theme.colors.panelBorder,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
     },
+    statusRowSuccess: {
+      backgroundColor: theme.isNeo ? '#dcfce7' : 'rgba(16,185,129,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(16,185,129,0.28)',
+    },
+    statusRowDanger: {
+      backgroundColor: theme.isNeo ? '#fee2e2' : 'rgba(239,68,68,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(239,68,68,0.28)',
+    },
+    statusRowWarning: {
+      backgroundColor: theme.isNeo ? '#fef3c7' : 'rgba(245,158,11,0.12)',
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(245,158,11,0.28)',
+    },
+    statusDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 999,
+      backgroundColor: theme.colors.textMuted,
+    },
+    statusDotSuccess: { backgroundColor: theme.colors.emerald },
+    statusDotDanger: { backgroundColor: theme.colors.red },
+    statusDotWarning: { backgroundColor: theme.colors.amber },
     statusLabel: {
       fontSize: theme.fontSize.xs,
-      color: theme.colors.textSecondary,
+      color: theme.colors.text,
+      fontFamily: theme.fonts.body,
+      flex: 1,
+      lineHeight: 18,
+    },
+    introHeaderRow: {
+      marginTop: theme.spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.sm,
+    },
+    templateBtn: {
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 6,
+      borderRadius: theme.radius.full,
+      backgroundColor: theme.colors.accentLight,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.black : theme.colors.accentDark,
+    },
+    templateBtnText: {
+      color: theme.colors.black,
+      fontSize: 10,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
+    previewWrap: {
+      marginTop: theme.spacing.lg,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.isNeo ? theme.colors.panel : 'rgba(15,23,42,0.2)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+    },
+    previewHeader: {
+      gap: 4,
+    },
+    previewTitle: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
+    },
+    previewHint: {
+      color: theme.colors.textMuted,
+      fontSize: 10,
       fontFamily: theme.fonts.body,
     },
     preview: {
@@ -493,6 +714,7 @@ const createStyles = (theme: Theme) =>
       color: theme.colors.text,
       fontFamily: theme.fonts.mono,
       marginTop: theme.spacing.sm,
+      lineHeight: 18,
     },
     modeChip: {
       backgroundColor: theme.colors.surfaceLight,

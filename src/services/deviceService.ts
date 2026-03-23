@@ -7,7 +7,8 @@ import { apiDeviceHeartbeat, apiRegisterDevice } from '../api/client';
 import { deviceStore } from '../stores/deviceStore';
 
 const sleep = (time: number) => new Promise((resolve) => setTimeout(resolve, time));
-export const TRACKING_INTERVAL_MS = 10000;
+export const TRACKING_INTERVAL_MS = 5 * 60 * 1000;
+export const TRACKING_INTERVAL_LABEL = '5 menit';
 let trackingStartPromise: Promise<void> | null = null;
 const ANDROID_VERSION = Platform.OS === 'android' ? Number(Platform.Version) : 0;
 
@@ -33,6 +34,12 @@ export interface AppEntryPermissionSummary {
   ready: boolean;
   missing: string[];
   locationGranted: boolean;
+}
+
+export interface BackgroundActivationResult {
+  summary: TrackingPermissionSummary;
+  trackingEnabled: boolean;
+  openedSettings: boolean;
 }
 
 function buildAppEntrySummary(locationGranted: boolean): AppEntryPermissionSummary {
@@ -253,6 +260,26 @@ export async function openAppSettings() {
   await Linking.openSettings();
 }
 
+function buildTrackingNotificationMeta(isOnline: boolean, note?: string) {
+  return {
+    taskTitle: isOnline ? 'xiaozhiscig monitor online' : 'xiaozhiscig monitor offline',
+    taskDesc: note
+      ? `${isOnline ? 'Online' : 'Offline'} • ${note}`
+      : `${isOnline ? 'Online' : 'Offline'} • sinkron tiap ${TRACKING_INTERVAL_LABEL}`,
+  };
+}
+
+async function updateTrackingNotification(isOnline: boolean, note?: string) {
+  if (!BackgroundService.isRunning()) {
+    return;
+  }
+  try {
+    await BackgroundService.updateNotification(buildTrackingNotificationMeta(isOnline, note));
+  } catch {
+    // ignore notification update failures
+  }
+}
+
 async function safeCall<T>(factory: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await factory();
@@ -277,7 +304,7 @@ async function getCurrentLocation(): Promise<{ latitude: number; longitude: numb
       {
         enableHighAccuracy: true,
         timeout: 15000,
-        maximumAge: 10000,
+        maximumAge: TRACKING_INTERVAL_MS,
       },
     );
   });
@@ -377,8 +404,8 @@ export async function sendHeartbeat() {
 
 const trackingOptions = {
   taskName: 'SciG Tracking',
-  taskTitle: 'SciG Mode Tracking Aktif',
-  taskDesc: 'Mengirim lokasi & status perangkat tiap 10 detik',
+  taskTitle: 'xiaozhiscig monitor latar belakang',
+  taskDesc: `Offline • sinkron tiap ${TRACKING_INTERVAL_LABEL}`,
   taskIcon: {
     name: 'ic_launcher',
     type: 'mipmap',
@@ -391,8 +418,9 @@ const trackingTask = async () => {
   while (BackgroundService.isRunning()) {
     try {
       await sendHeartbeat();
+      await updateTrackingNotification(true, `sinkron tiap ${TRACKING_INTERVAL_LABEL}`);
     } catch {
-      // ignore errors to keep service running
+      await updateTrackingNotification(false, 'cek koneksi, lokasi, atau izin notifikasi');
     }
     await sleep(TRACKING_INTERVAL_MS);
   }
@@ -412,10 +440,20 @@ export async function startTracking(options: { skipPermissionCheck?: boolean } =
     }
 
     try {
-      await syncDeviceSnapshot().catch(() => {});
+      let synced = false;
+      try {
+        await syncDeviceSnapshot();
+        synced = true;
+      } catch {
+        synced = false;
+      }
       if (!BackgroundService.isRunning()) {
         await BackgroundService.start(trackingTask, trackingOptions);
       }
+      await updateTrackingNotification(
+        synced,
+        synced ? `sinkron tiap ${TRACKING_INTERVAL_LABEL}` : 'menunggu sinkron pertama',
+      );
     } catch {
       await deviceStore.setTrackingEnabled(false);
       throw new Error(
@@ -442,6 +480,58 @@ export async function stopTracking() {
 
 export async function isTrackingRunning(): Promise<boolean> {
   return BackgroundService.isRunning();
+}
+
+export async function activateBackgroundMonitoring(): Promise<BackgroundActivationResult> {
+  if (Platform.OS !== 'android') {
+    await startTracking();
+    return {
+      summary: await getTrackingPermissionSummary(),
+      trackingEnabled: await isTrackingRunning(),
+      openedSettings: false,
+    };
+  }
+
+  let needsSettings = false;
+  let openedSettings = false;
+
+  const location = await ensureLocationPermission();
+  needsSettings = needsSettings || location.neverAskAgain;
+
+  const notifications = await ensureNotificationPermission();
+  needsSettings = needsSettings || notifications.neverAskAgain;
+
+  let backgroundGranted = await checkAndroidPermission(BACKGROUND_LOCATION);
+  if (isAndroidPermissionRequired(BACKGROUND_LOCATION) && location.granted && !backgroundGranted) {
+    if (ANDROID_VERSION <= 29) {
+      const result = await requestAndroidPermission(BACKGROUND_LOCATION);
+      backgroundGranted = await checkAndroidPermission(BACKGROUND_LOCATION);
+      needsSettings = needsSettings || result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN;
+    } else {
+      needsSettings = true;
+      openedSettings = true;
+      await openAppSettings().catch(() => {});
+    }
+  }
+
+  const summary = buildPermissionSummary({
+    locationGranted: location.granted,
+    backgroundGranted,
+    notificationsGranted: notifications.granted,
+    needsSettings,
+  });
+
+  if (summary.ready) {
+    await startTracking({ skipPermissionCheck: true });
+  } else {
+    await deviceStore.setTrackingEnabled(false);
+  }
+
+  return {
+    summary,
+    trackingEnabled: await isTrackingRunning(),
+    openedSettings,
+  };
 }
 
 export async function bootstrapTrackingAfterLogin(): Promise<AppEntryPermissionSummary> {

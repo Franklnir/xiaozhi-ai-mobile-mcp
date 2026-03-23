@@ -326,12 +326,19 @@ export async function apiSaveMode(mode: ModeInfo) {
   return res.data;
 }
 
-export async function apiRenderPrompt(modeId: number | null, vars: Record<string, any>, deviceId?: string) {
+export async function apiRenderPrompt(
+  modeId: number | null,
+  vars: Record<string, any>,
+  deviceId?: string,
+  overrides?: { title?: string; introduction?: string },
+) {
   const api = await getApi();
   const res = await api.post('/api/render-prompt', {
     mode_id: modeId,
     vars,
     device_id: deviceId || null,
+    title: overrides?.title,
+    introduction: overrides?.introduction,
   });
   return res.data;
 }
