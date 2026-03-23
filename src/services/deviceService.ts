@@ -9,8 +9,11 @@ import { deviceStore } from '../stores/deviceStore';
 const sleep = (time: number) => new Promise((resolve) => setTimeout(resolve, time));
 export const TRACKING_INTERVAL_MS = 10000;
 let trackingStartPromise: Promise<void> | null = null;
+const ANDROID_VERSION = Platform.OS === 'android' ? Number(Platform.Version) : 0;
 
 type AndroidPermission = Parameters<typeof PermissionsAndroid.check>[0];
+type AndroidPermissionStatus =
+  (typeof PermissionsAndroid.RESULTS)[keyof typeof PermissionsAndroid.RESULTS];
 
 const FINE_LOCATION: AndroidPermission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
 const COARSE_LOCATION: AndroidPermission = PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION;
@@ -28,10 +31,10 @@ export interface TrackingPermissionSummary {
 
 function isAndroidPermissionRequired(permission: AndroidPermission): boolean {
   if (permission === BACKGROUND_LOCATION) {
-    return Platform.OS === 'android' && Platform.Version >= 29;
+    return Platform.OS === 'android' && ANDROID_VERSION >= 29;
   }
   if (permission === POST_NOTIFICATIONS) {
-    return Platform.OS === 'android' && Platform.Version >= 33;
+    return Platform.OS === 'android' && ANDROID_VERSION >= 33;
   }
   return Platform.OS === 'android';
 }
@@ -80,11 +83,14 @@ export async function getTrackingPermissionSummary(): Promise<TrackingPermission
   const coarseGranted = await checkAndroidPermission(COARSE_LOCATION);
   const backgroundGranted = await checkAndroidPermission(BACKGROUND_LOCATION);
   const notificationsGranted = await checkAndroidPermission(POST_NOTIFICATIONS);
+  const locationGranted = fineGranted || coarseGranted;
+  const needsSettings = ANDROID_VERSION >= 30 && locationGranted && !backgroundGranted;
 
   return buildPermissionSummary({
-    locationGranted: fineGranted || coarseGranted,
+    locationGranted,
     backgroundGranted,
     notificationsGranted,
+    needsSettings,
   });
 }
 
@@ -95,50 +101,125 @@ function buildPermissionError(summary: TrackingPermissionSummary): string {
   return `Izin wajib belum lengkap: ${summary.missing.join(', ')}.`;
 }
 
+async function requestAndroidPermission(
+  permission: AndroidPermission,
+): Promise<AndroidPermissionStatus> {
+  if (!isAndroidPermissionRequired(permission)) {
+    return PermissionsAndroid.RESULTS.GRANTED;
+  }
+
+  try {
+    return await PermissionsAndroid.request(permission);
+  } catch {
+    return PermissionsAndroid.RESULTS.DENIED;
+  }
+}
+
+async function ensureLocationPermission(): Promise<{
+  granted: boolean;
+  neverAskAgain: boolean;
+}> {
+  const existingFine = await checkAndroidPermission(FINE_LOCATION);
+  const existingCoarse = await checkAndroidPermission(COARSE_LOCATION);
+
+  if (existingFine || existingCoarse) {
+    return {
+      granted: true,
+      neverAskAgain: false,
+    };
+  }
+
+  const fineResult = await requestAndroidPermission(FINE_LOCATION);
+  let fineGranted = await checkAndroidPermission(FINE_LOCATION);
+  let coarseGranted = await checkAndroidPermission(COARSE_LOCATION);
+
+  if (!fineGranted && !coarseGranted && fineResult !== PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+    await requestAndroidPermission(COARSE_LOCATION);
+    fineGranted = await checkAndroidPermission(FINE_LOCATION);
+    coarseGranted = await checkAndroidPermission(COARSE_LOCATION);
+  }
+
+  return {
+    granted: fineGranted || coarseGranted,
+    neverAskAgain: fineResult === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
+  };
+}
+
+async function ensureNotificationPermission(): Promise<{
+  granted: boolean;
+  neverAskAgain: boolean;
+}> {
+  const alreadyGranted = await checkAndroidPermission(POST_NOTIFICATIONS);
+  if (alreadyGranted) {
+    return {
+      granted: true,
+      neverAskAgain: false,
+    };
+  }
+
+  const result = await requestAndroidPermission(POST_NOTIFICATIONS);
+  const granted = await checkAndroidPermission(POST_NOTIFICATIONS);
+
+  return {
+    granted,
+    neverAskAgain: result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
+  };
+}
+
+async function ensureBackgroundLocationPermission(locationGranted: boolean): Promise<{
+  granted: boolean;
+  needsSettings: boolean;
+}> {
+  if (!isAndroidPermissionRequired(BACKGROUND_LOCATION)) {
+    return {
+      granted: true,
+      needsSettings: false,
+    };
+  }
+
+  const alreadyGranted = await checkAndroidPermission(BACKGROUND_LOCATION);
+  if (alreadyGranted || !locationGranted) {
+    return {
+      granted: alreadyGranted,
+      needsSettings: false,
+    };
+  }
+
+  if (ANDROID_VERSION >= 30) {
+    return {
+      granted: false,
+      needsSettings: true,
+    };
+  }
+
+  const result = await requestAndroidPermission(BACKGROUND_LOCATION);
+  return {
+    granted: await checkAndroidPermission(BACKGROUND_LOCATION),
+    needsSettings: result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
+  };
+}
+
 export async function requestTrackingPermissions(): Promise<TrackingPermissionSummary> {
   if (Platform.OS !== 'android') {
     return getTrackingPermissionSummary();
   }
 
   let needsSettings = false;
+  const location = await ensureLocationPermission();
+  needsSettings = needsSettings || location.neverAskAgain;
 
-  const locationResults = await PermissionsAndroid.requestMultiple([FINE_LOCATION, COARSE_LOCATION]);
-  const locationGranted =
-    locationResults[FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
-    locationResults[COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+  const notifications = await ensureNotificationPermission();
+  needsSettings = needsSettings || notifications.neverAskAgain;
 
-  if (
-    locationResults[FINE_LOCATION] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ||
-    locationResults[COARSE_LOCATION] === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-  ) {
-    needsSettings = true;
-  }
+  const background = await ensureBackgroundLocationPermission(location.granted);
+  needsSettings = needsSettings || background.needsSettings;
 
-  if (Platform.Version >= 33) {
-    const notificationResult = await PermissionsAndroid.request(POST_NOTIFICATIONS);
-    if (notificationResult === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
-      needsSettings = true;
-    }
-  }
-
-  if (Platform.Version >= 29 && locationGranted) {
-    const backgroundAlreadyGranted = await PermissionsAndroid.check(BACKGROUND_LOCATION);
-    if (!backgroundAlreadyGranted) {
-      const backgroundResult = await PermissionsAndroid.request(BACKGROUND_LOCATION);
-      if (
-        backgroundResult === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ||
-        (Platform.Version >= 30 && backgroundResult !== PermissionsAndroid.RESULTS.GRANTED)
-      ) {
-        needsSettings = true;
-      }
-    }
-  }
-
-  const summary = await getTrackingPermissionSummary();
-  return {
-    ...summary,
-    needsSettings: needsSettings || summary.needsSettings,
-  };
+  return buildPermissionSummary({
+    locationGranted: location.granted,
+    backgroundGranted: background.granted,
+    notificationsGranted: notifications.granted,
+    needsSettings,
+  });
 }
 
 export async function openAppSettings() {
@@ -304,11 +385,6 @@ export async function startTracking(options: { skipPermissionCheck?: boolean } =
     }
 
     await deviceStore.setTrackingEnabled(true);
-    try {
-      await sendHeartbeat();
-    } catch {
-      // keep service running even if first sync fails
-    }
   })();
 
   try {
@@ -332,16 +408,11 @@ export async function isTrackingRunning(): Promise<boolean> {
 export async function bootstrapTrackingAfterLogin(): Promise<TrackingPermissionSummary> {
   const summary = await requestTrackingPermissions();
   if (!summary.ready) {
+    await deviceStore.setTrackingEnabled(false);
     return summary;
   }
 
-  await registerDevice();
   await deviceStore.setTrackingEnabled(true);
-  try {
-    await sendHeartbeat();
-  } catch {
-    // allow app to continue even if backend has not replied yet
-  }
   return summary;
 }
 

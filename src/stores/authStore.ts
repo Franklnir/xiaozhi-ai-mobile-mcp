@@ -1,4 +1,5 @@
 import EncryptedStorage from 'react-native-encrypted-storage';
+import { DEFAULT_SERVER_URL } from '../config/appConfig';
 import { validateServerUrl } from '../utils/serverUrl';
 
 const TOKEN_KEY = 'scig_access_token';
@@ -42,10 +43,10 @@ export const authStore = {
   async getServerUrl(): Promise<string> {
     try {
       const url = await EncryptedStorage.getItem(SERVER_URL_KEY);
-      if (!url) return '';
+      if (!url) return DEFAULT_SERVER_URL;
       return validateServerUrl(url);
     } catch {
-      return '';
+      return DEFAULT_SERVER_URL;
     }
   },
 

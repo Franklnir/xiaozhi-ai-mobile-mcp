@@ -70,15 +70,6 @@ export default function DevicesScreen() {
         const enabled = await deviceStore.isTrackingEnabled();
         if (!active) return;
         setTrackingEnabled(enabled);
-        if (enabled) {
-          try {
-            await startTracking();
-          } catch (e: any) {
-            if (active) {
-              setBootError(e?.message || 'Tracking belum aktif penuh. Lengkapi izin aplikasi.');
-            }
-          }
-        }
         await loadDevices();
       } catch (e: any) {
         if (active) {

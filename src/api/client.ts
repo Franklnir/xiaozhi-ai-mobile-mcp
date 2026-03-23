@@ -5,14 +5,19 @@ import { validateServerUrl } from '../utils/serverUrl';
 let apiClient: AxiosInstance | null = null;
 let apiBaseURL = '';
 
+async function resolveBaseURL(serverUrl?: string): Promise<string> {
+  const raw = (serverUrl || '').trim();
+  if (raw) {
+    return validateServerUrl(raw);
+  }
+  return authStore.getServerUrl();
+}
+
 /**
  * Initialize or re-initialize the API client with the given server URL.
  */
 export async function initApiClient(): Promise<AxiosInstance> {
-  const baseURL = await authStore.getServerUrl();
-  if (!baseURL) {
-    throw new Error('Server URL belum diatur.');
-  }
+  const baseURL = await resolveBaseURL();
   apiBaseURL = baseURL;
 
   apiClient = axios.create({
@@ -91,12 +96,12 @@ function extractRegisterError(html?: string): string | null {
  * so we POST form data and extract the cookie from the redirect response.
  */
 export async function apiLogin(
-  serverUrl: string,
+  serverUrl: string | undefined,
   username: string,
   password: string,
 ): Promise<LoginResult> {
   try {
-    const normalizedServerUrl = validateServerUrl(serverUrl);
+    const normalizedServerUrl = await resolveBaseURL(serverUrl);
     // Save server URL for future API calls
     await authStore.setServerUrl(normalizedServerUrl);
 
@@ -153,14 +158,14 @@ export async function apiLogin(
  * Register a new account. Backend returns HTML; on success it sets cookie + redirect.
  */
 export async function apiRegister(
-  serverUrl: string,
+  serverUrl: string | undefined,
   username: string,
   password: string,
   confirmPassword: string,
   code?: string,
 ): Promise<RegisterResult> {
   try {
-    const normalizedServerUrl = validateServerUrl(serverUrl);
+    const normalizedServerUrl = await resolveBaseURL(serverUrl);
     await authStore.setServerUrl(normalizedServerUrl);
 
     const formData = new URLSearchParams();
@@ -217,8 +222,7 @@ export async function apiRegister(
 }
 
 export async function apiGetPublicSettings(serverUrl?: string): Promise<PublicSettings> {
-  const saved = await authStore.getServerUrl();
-  const baseURL = validateServerUrl(serverUrl || saved);
+  const baseURL = await resolveBaseURL(serverUrl);
   const res = await axios.get(`${baseURL}/api/public/settings`, { timeout: 10000 });
   return res.data;
 }

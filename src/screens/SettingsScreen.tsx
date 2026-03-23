@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -10,10 +9,10 @@ import {
   Animated,
   Easing,
 } from 'react-native';
+import { APP_PUBLIC_NAME, APP_PUBLIC_VERSION } from '../config/appConfig';
 import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
 import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig } from '../api/client';
-import { SERVER_URL_PLACEHOLDER } from '../utils/serverUrl';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -21,7 +20,7 @@ interface SettingsScreenProps {
 
 export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const { theme, themeName, setThemeName } = useTheme();
-  const [serverUrl, setServerUrl] = useState('');
+  const [backendUrl, setBackendUrl] = useState('');
   const [source, setSource] = useState('Indonesia');
   const [target, setTarget] = useState('Arab');
   const [languages, setLanguages] = useState<string[]>([]);
@@ -61,7 +60,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   useEffect(() => {
     (async () => {
       const url = await authStore.getServerUrl();
-      setServerUrl(url);
+      setBackendUrl(url);
       try {
         const config = await apiGetConfig();
         setLanguages(config.languages || []);
@@ -73,15 +72,6 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       }
     })();
   }, []);
-
-  async function saveServerUrl() {
-    try {
-      await authStore.setServerUrl(serverUrl.trim());
-      Alert.alert('Tersimpan', 'Server URL berhasil disimpan.');
-    } catch (e: any) {
-      Alert.alert('URL tidak valid', e.message || 'Server URL tidak valid.');
-    }
-  }
 
   async function saveLanguage() {
     setSaving(true);
@@ -109,21 +99,12 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         <Animated.View style={contentAnimStyle}>
           {/* Server URL */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Server URL</Text>
-            <Text style={styles.cardSubtitle}>Alamat backend SciG Mode MCP</Text>
-            <TextInput
-              style={styles.input}
-              value={serverUrl}
-              onChangeText={setServerUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder={SERVER_URL_PLACEHOLDER}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-            <TouchableOpacity style={styles.saveBtn} onPress={saveServerUrl}>
-              <Text style={styles.saveBtnText}>Simpan URL</Text>
-            </TouchableOpacity>
+            <Text style={styles.cardTitle}>Backend Aplikasi</Text>
+            <Text style={styles.cardSubtitle}>Alamat backend default untuk {APP_PUBLIC_NAME} sudah tertanam di APK</Text>
+            <View style={styles.backendBox}>
+              <Text style={styles.backendValue}>{backendUrl}</Text>
+              <Text style={styles.backendHint}>Kalau mau ganti server, cukup ubah konfigurasi build. User biasa tidak perlu mengisi URL lagi.</Text>
+            </View>
           </View>
 
           {/* Theme */}
@@ -200,11 +181,11 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
             <Text style={styles.cardTitle}>Informasi</Text>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>App</Text>
-              <Text style={styles.infoValue}>SciG Mode MCP Mobile v0.5</Text>
+              <Text style={styles.infoValue}>{APP_PUBLIC_NAME} v{APP_PUBLIC_VERSION}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Backend</Text>
-              <Text style={styles.infoValue}>{serverUrl}</Text>
+              <Text style={styles.infoValue}>{backendUrl}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Platform</Text>
@@ -282,6 +263,26 @@ const createStyles = (theme: Theme) =>
       paddingVertical: theme.spacing.md,
       color: theme.colors.text,
       fontSize: theme.fontSize.md,
+      fontFamily: theme.fonts.body,
+    },
+    backendBox: {
+      backgroundColor: theme.isNeo ? '#fff7ed' : theme.colors.surface,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+    },
+    backendValue: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontFamily: theme.fonts.mono,
+    },
+    backendHint: {
+      marginTop: theme.spacing.sm,
+      color: theme.colors.textMuted,
+      fontSize: theme.fontSize.xs,
+      lineHeight: 18,
       fontFamily: theme.fonts.body,
     },
     saveBtn: {

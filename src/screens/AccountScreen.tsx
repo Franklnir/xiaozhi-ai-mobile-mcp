@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -11,16 +10,16 @@ import {
   Easing,
   Linking,
 } from 'react-native';
+import { APP_PUBLIC_NAME } from '../config/appConfig';
 import { Theme, ThemeName, useTheme } from '../theme/theme';
 import { authStore } from '../stores/authStore';
 import { deviceStore } from '../stores/deviceStore';
 import { stopTracking } from '../services/deviceService';
 import { apiGetDeviceSettings, apiSetDeviceSettings, apiGetConfig, apiGetPublicSettings, SocialLink } from '../api/client';
-import { SERVER_URL_PLACEHOLDER } from '../utils/serverUrl';
 
 export default function AccountScreen() {
   const { theme, themeName, setThemeName } = useTheme();
-  const [serverUrl, setServerUrl] = useState('');
+  const [backendUrl, setBackendUrl] = useState('');
   const [source, setSource] = useState('Indonesia');
   const [target, setTarget] = useState('Arab');
   const [languages, setLanguages] = useState<string[]>([]);
@@ -61,7 +60,7 @@ export default function AccountScreen() {
   useEffect(() => {
     (async () => {
       const url = await authStore.getServerUrl();
-      setServerUrl(url);
+      setBackendUrl(url);
       try {
         const config = await apiGetConfig();
         setLanguages(config.languages || []);
@@ -77,15 +76,6 @@ export default function AccountScreen() {
       }
     })();
   }, []);
-
-  async function saveServerUrl() {
-    try {
-      await authStore.setServerUrl(serverUrl.trim());
-      Alert.alert('Tersimpan', 'Server URL berhasil disimpan.');
-    } catch (e: any) {
-      Alert.alert('URL tidak valid', e.message || 'Server URL tidak valid.');
-    }
-  }
 
   async function saveLanguage() {
     setSaving(true);
@@ -114,21 +104,12 @@ export default function AccountScreen() {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Server URL</Text>
-            <Text style={styles.cardSubtitle}>Alamat backend SciG Mode MCP</Text>
-            <TextInput
-              style={styles.input}
-              value={serverUrl}
-              onChangeText={setServerUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder={SERVER_URL_PLACEHOLDER}
-              placeholderTextColor={theme.colors.textMuted}
-            />
-            <TouchableOpacity style={styles.saveBtn} onPress={saveServerUrl}>
-              <Text style={styles.saveBtnText}>Simpan URL</Text>
-            </TouchableOpacity>
+            <Text style={styles.cardTitle}>Backend Aplikasi</Text>
+            <Text style={styles.cardSubtitle}>Alamat backend untuk {APP_PUBLIC_NAME} sudah dibundel otomatis</Text>
+            <View style={styles.backendBox}>
+              <Text style={styles.backendValue}>{backendUrl}</Text>
+              <Text style={styles.backendHint}>User akhir tidak perlu input URL server manual dari layar akun.</Text>
+            </View>
           </View>
 
           <View style={styles.card}>
@@ -273,6 +254,27 @@ const createStyles = (theme: Theme) =>
       fontSize: theme.fontSize.xs,
       color: theme.colors.textMuted,
       marginTop: 4,
+      fontFamily: theme.fonts.body,
+    },
+    backendBox: {
+      marginTop: theme.spacing.md,
+      backgroundColor: theme.colors.surfaceLight,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+    },
+    backendValue: {
+      color: theme.colors.text,
+      fontFamily: theme.fonts.mono,
+      fontSize: theme.fontSize.sm,
+    },
+    backendHint: {
+      marginTop: theme.spacing.sm,
+      color: theme.colors.textMuted,
+      fontSize: theme.fontSize.xs,
+      lineHeight: 18,
       fontFamily: theme.fonts.body,
     },
     input: {

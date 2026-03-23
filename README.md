@@ -26,13 +26,15 @@ mobile/
 │   ├── api/
 │   │   └── client.ts            # Axios API client + auth interceptor
 │   ├── screens/
-│   │   ├── LoginScreen.tsx      # Login (server URL + credentials)
+│   │   ├── LoginScreen.tsx      # Login (backend bawaan + credentials)
 │   │   ├── DashboardScreen.tsx  # Mode control, chat viewer, MCP status
-│   │   └── SettingsScreen.tsx   # Server URL, language settings
+│   │   └── SettingsScreen.tsx   # Info backend, tema, bahasa
 │   ├── navigation/
 │   │   └── AppNavigator.tsx     # Screen routing with auth check
 │   ├── stores/
 │   │   └── authStore.ts         # Encrypted token storage
+│   ├── config/
+│   │   └── appConfig.ts         # Nama app + default backend URL
 │   └── theme/
 │       └── colors.ts            # Design tokens (matches web theme)
 ```
@@ -101,6 +103,6 @@ Upload ke GitHub releases: https://github.com/Franklnir/xiaozhi-ai-mobile-mcp/re
 
 ## Catatan
 
-- **Server URL**: Untuk production gunakan `https://your-domain.example`. HTTP hanya aman untuk testing localhost/LAN.
+- **Backend URL bawaan app**: Atur sekali di `src/config/appConfig.ts`, lalu user APK tidak perlu mengetik URL server lagi.
 - **CORS**: Backend sudah dikonfigurasi dengan CORS middleware yang mendukung cross-origin requests.
 - **HTTPS**: Untuk produksi, gunakan HTTPS. Self-signed certificate tidak akan bekerja di Android tanpa konfigurasi tambahan.

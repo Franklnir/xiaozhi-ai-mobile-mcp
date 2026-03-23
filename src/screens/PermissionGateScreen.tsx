@@ -12,6 +12,7 @@ import {
 import { Theme, useTheme } from '../theme/theme';
 import {
   bootstrapTrackingAfterLogin,
+  getTrackingPermissionSummary,
   openAppSettings,
   stopTracking,
   TrackingPermissionSummary,
@@ -27,7 +28,10 @@ function buildHint(summary: TrackingPermissionSummary | null): string {
   if (!summary || summary.ready) {
     return '';
   }
-  return `Aplikasi butuh izin ini agar tracking 10 detik, lokasi real-time, dan foreground service tetap jalan: ${summary.missing.join(', ')}.`;
+  const tail = summary.needsSettings
+    ? ' Di Android terbaru, beberapa izin perlu diaktifkan manual dari Pengaturan Aplikasi > Izin.'
+    : '';
+  return `Aplikasi butuh izin ini agar tracking 10 detik, lokasi real-time, dan foreground service tetap jalan: ${summary.missing.join(', ')}.${tail}`;
 }
 
 export default function PermissionGateScreen({ onReady }: PermissionGateScreenProps) {
@@ -49,18 +53,27 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
     }).start();
   }, [enterAnim]);
 
-  const runSetup = useCallback(async () => {
+  const runSetup = useCallback(async (interactive = true) => {
     if (setupInFlightRef.current) {
       return;
     }
     setupInFlightRef.current = true;
     setLoading(true);
-    setMessage('Meminta izin lokasi, background, dan notifikasi dengan aman...');
+    setMessage(
+      interactive
+        ? 'Meminta izin lokasi, background, dan notifikasi dengan aman...'
+        : 'Memeriksa ulang status izin perangkat...',
+    );
     try {
-      const result = await bootstrapTrackingAfterLogin();
+      const result = interactive
+        ? await bootstrapTrackingAfterLogin()
+        : await getTrackingPermissionSummary();
       if (!mountedRef.current) return;
       setSummary(result);
       if (result.ready) {
+        if (!interactive) {
+          await deviceStore.setTrackingEnabled(true);
+        }
         setMessage('Izin lengkap. Menyiapkan aplikasi...');
         onReady?.();
         return;
@@ -80,10 +93,10 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
 
   useEffect(() => {
     mountedRef.current = true;
-    runSetup().catch(() => {});
+    runSetup(true).catch(() => {});
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        runSetup().catch(() => {});
+        runSetup(false).catch(() => {});
       }
     });
     return () => {
@@ -117,7 +130,7 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
       <Animated.View style={[styles.card, animStyle]}>
         <Text style={styles.title}>Aktifkan Izin Perangkat</Text>
         <Text style={styles.subtitle}>
-          Setelah login, izin lokasi, background location, dan notifikasi wajib aktif supaya aplikasi tetap stabil dan tracking bisa berjalan di latar belakang.
+          Setelah login, aplikasi akan meminta izin secara bertahap supaya lebih aman. Jika Android tidak menampilkan dialog lanjutan, lanjutkan dari tombol pengaturan aplikasi.
         </Text>
 
         <View style={styles.statusBox}>
@@ -135,9 +148,11 @@ export default function PermissionGateScreen({ onReady }: PermissionGateScreenPr
         <TouchableOpacity
           style={[styles.primaryBtn, loading && styles.btnDisabled]}
           disabled={loading}
-          onPress={() => runSetup().catch(() => {})}
+          onPress={() => runSetup(true).catch(() => {})}
         >
-          <Text style={styles.primaryText}>{loading ? 'Memproses...' : 'Coba Lagi'}</Text>
+          <Text style={styles.primaryText}>
+            {loading ? 'Memproses...' : summary?.needsSettings ? 'Saya Sudah Aktifkan' : 'Coba Lagi'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.secondaryBtn} onPress={() => openAppSettings().catch(() => {})}>

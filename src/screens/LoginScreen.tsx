@@ -12,10 +12,10 @@ import {
   Animated,
   Easing,
 } from 'react-native';
+import { APP_PUBLIC_NAME } from '../config/appConfig';
 import { Theme, useTheme } from '../theme/theme';
 import { apiGetPublicSettings, apiLogin, apiRegister } from '../api/client';
 import { authStore } from '../stores/authStore';
-import { SERVER_URL_PLACEHOLDER } from '../utils/serverUrl';
 
 interface LoginScreenProps {
   onLoginSuccess?: () => void;
@@ -33,9 +33,10 @@ const TEXT: Record<LangKey, Record<string, string>> = {
   id: {
     login: 'Login',
     register: 'Register',
-    loginSubtitle: 'Masuk dengan akun SciG Mode MCP Anda',
-    registerSubtitle: 'Buat akun baru SciG Mode MCP',
-    serverUrl: 'Server URL',
+    loginSubtitle: `Masuk dengan akun ${APP_PUBLIC_NAME} Anda`,
+    registerSubtitle: `Buat akun baru ${APP_PUBLIC_NAME}`,
+    backend: 'Backend',
+    backendHint: 'Alamat server sudah ditanam di APK ini, jadi user tidak perlu isi URL manual.',
     username: 'Username',
     password: 'Password',
     confirmPassword: 'Konfirmasi Password',
@@ -53,9 +54,10 @@ const TEXT: Record<LangKey, Record<string, string>> = {
   en: {
     login: 'Login',
     register: 'Register',
-    loginSubtitle: 'Sign in with your SciG Mode MCP account',
-    registerSubtitle: 'Create a new SciG Mode MCP account',
-    serverUrl: 'Server URL',
+    loginSubtitle: `Sign in with your ${APP_PUBLIC_NAME} account`,
+    registerSubtitle: `Create a new ${APP_PUBLIC_NAME} account`,
+    backend: 'Backend',
+    backendHint: 'The backend address is bundled into this APK, so end users do not need to type a server URL.',
     username: 'Username',
     password: 'Password',
     confirmPassword: 'Confirm Password',
@@ -73,9 +75,10 @@ const TEXT: Record<LangKey, Record<string, string>> = {
   ar: {
     login: 'تسجيل الدخول',
     register: 'تسجيل',
-    loginSubtitle: 'سجّل الدخول بحساب SciG Mode MCP',
-    registerSubtitle: 'أنشئ حساب SciG Mode MCP جديد',
-    serverUrl: 'رابط الخادم',
+    loginSubtitle: `سجّل الدخول بحساب ${APP_PUBLIC_NAME}`,
+    registerSubtitle: `أنشئ حساب ${APP_PUBLIC_NAME} جديد`,
+    backend: 'الخادم',
+    backendHint: 'عنوان الخادم مدمج داخل ملف APK، لذلك لا يحتاج المستخدم لإدخال الرابط يدويًا.',
     username: 'اسم المستخدم',
     password: 'كلمة المرور',
     confirmPassword: 'تأكيد كلمة المرور',
@@ -94,7 +97,7 @@ const TEXT: Record<LangKey, Record<string, string>> = {
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const { theme } = useTheme();
-  const [serverUrl, setServerUrl] = useState('');
+  const [backendUrl, setBackendUrl] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const [language, setLanguage] = useState<LangKey>('id');
   const [registerRequiresCode, setRegisterRequiresCode] = useState(true);
@@ -110,35 +113,19 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   useEffect(() => {
     (async () => {
       const saved = await authStore.getServerUrl();
-      if (saved) setServerUrl(saved);
+      setBackendUrl(saved);
       const savedLang = await authStore.getLanguage();
       if (savedLang === 'id' || savedLang === 'en' || savedLang === 'ar') {
         setLanguage(savedLang);
       }
       try {
-        const initialUrl = saved || serverUrl;
-        if (initialUrl) {
-          const settings = await apiGetPublicSettings(initialUrl);
-          setRegisterRequiresCode(settings.register_requires_code !== false);
-        }
+        const settings = await apiGetPublicSettings(saved);
+        setRegisterRequiresCode(settings.register_requires_code !== false);
       } catch {
         // ignore
       }
     })();
   }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const url = serverUrl.trim();
-      if (!url) return;
-      apiGetPublicSettings(url)
-        .then((settings) => {
-          setRegisterRequiresCode(settings.register_requires_code !== false);
-        })
-        .catch(() => {});
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [serverUrl]);
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -183,7 +170,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   }
 
   async function handleLogin() {
-    if (!serverUrl.trim() || !username.trim() || !password.trim()) {
+    if (!username.trim() || !password.trim()) {
       setError(t('required'));
       return;
     }
@@ -192,7 +179,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     setError('');
 
     try {
-      const result = await apiLogin(serverUrl.trim(), username.trim(), password);
+      const result = await apiLogin(undefined, username.trim(), password);
       if (result.success) {
         onLoginSuccess?.();
       } else {
@@ -206,12 +193,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   }
 
   async function handleRegister() {
-    if (
-      !serverUrl.trim() ||
-      !username.trim() ||
-      !password.trim() ||
-      !confirmPassword.trim()
-    ) {
+    if (!username.trim() || !password.trim() || !confirmPassword.trim()) {
       setError(t('required'));
       return;
     }
@@ -225,7 +207,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
     try {
       const result = await apiRegister(
-        serverUrl.trim(),
+        undefined,
         username.trim(),
         password,
         confirmPassword,
@@ -270,7 +252,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         {/* Logo area */}
         <Animated.View style={[styles.logoArea, logoAnimStyle]}>
           <Text style={styles.logoIcon}>🤖</Text>
-          <Text style={styles.logoTitle}>SciG Mode</Text>
+          <Text style={styles.logoTitle}>{APP_PUBLIC_NAME}</Text>
           <Text style={styles.logoSubtitle}>Xiaozhi AI Controller</Text>
         </Animated.View>
 
@@ -287,17 +269,11 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             </View>
           ) : null}
 
-          <Text style={styles.label}>{t('serverUrl')}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder={SERVER_URL_PLACEHOLDER}
-            placeholderTextColor={theme.colors.textMuted}
-            value={serverUrl}
-            onChangeText={setServerUrl}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-          />
+          <View style={styles.backendBox}>
+            <Text style={styles.backendLabel}>{t('backend')}</Text>
+            <Text style={styles.backendValue}>{backendUrl}</Text>
+            <Text style={styles.backendHint}>{t('backendHint')}</Text>
+          </View>
 
           <Text style={styles.label}>{t('username')}</Text>
           <TextInput
@@ -490,6 +466,33 @@ const createStyles = (theme: Theme) =>
     errorText: {
       color: theme.isNeo ? theme.colors.redDark : '#fca5a5',
       fontSize: theme.fontSize.sm,
+      fontFamily: theme.fonts.body,
+    },
+    backendBox: {
+      marginTop: theme.spacing.md,
+      backgroundColor: theme.isNeo ? '#fff7ed' : theme.colors.surface,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+    },
+    backendLabel: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textSecondary,
+      fontFamily: theme.fonts.body,
+    },
+    backendValue: {
+      marginTop: theme.spacing.xs,
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.text,
+      fontFamily: theme.fonts.mono,
+    },
+    backendHint: {
+      marginTop: theme.spacing.sm,
+      fontSize: theme.fontSize.xs,
+      lineHeight: 18,
+      color: theme.colors.textMuted,
       fontFamily: theme.fonts.body,
     },
     label: {
