@@ -262,6 +262,18 @@ export interface DeviceInfo {
   is_online?: number;
 }
 
+export interface DeviceLocationInfo {
+  id: number;
+  device_id: string;
+  latitude?: number;
+  longitude?: number;
+  address_street?: string;
+  address_area?: string;
+  address_city?: string;
+  address_full?: string;
+  recorded_at?: string;
+}
+
 export interface DeviceRegisterResult {
   device_id: string;
   device_token: string;
@@ -468,9 +480,26 @@ export async function apiGetDeviceDetail(deviceId: string): Promise<DeviceInfo> 
   return res.data;
 }
 
+export async function apiGetDeviceLocations(
+  deviceId: string,
+  limit = 400,
+): Promise<DeviceLocationInfo[]> {
+  const api = await getApi();
+  const res = await api.get(
+    `/api/devices/${encodeURIComponent(deviceId)}/locations?limit=${encodeURIComponent(String(limit))}`,
+  );
+  return res.data;
+}
+
 export async function apiSetDeviceAlias(deviceId: string, alias: string) {
   const api = await getApi();
   const res = await api.post('/api/devices/alias', { device_id: deviceId, alias });
+  return res.data;
+}
+
+export async function apiUnpairDevice(deviceId: string) {
+  const api = await getApi();
+  const res = await api.post('/api/devices/unpair', { device_id: deviceId });
   return res.data;
 }
 
@@ -480,8 +509,12 @@ export async function apiCreatePairToken(deviceId: string, deviceToken: string) 
   return res.data;
 }
 
-export async function apiClaimPairToken(pairToken: string, alias?: string) {
+export async function apiClaimPairToken(pairToken: string): Promise<{
+  ok: boolean;
+  device_id: string;
+  device: DeviceInfo;
+}> {
   const api = await getApi();
-  const res = await api.post('/api/devices/pair-claim', { pair_token: pairToken, alias });
+  const res = await api.post('/api/devices/pair-claim', { pair_token: pairToken });
   return res.data;
 }

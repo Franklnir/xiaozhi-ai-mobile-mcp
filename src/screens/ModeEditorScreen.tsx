@@ -32,10 +32,13 @@ import { registerDevice } from '../services/deviceService';
 const PROMPT_PREVIEW_DEBOUNCE_MS = 350;
 const DEVICE_LIVE_TEMPLATE = [
   'PERAN: Asisten monitoring perangkat yang fokus pada data HP terbaru.',
-  'KONTEKS PERANGKAT (snapshot maksimal 5 menit sekali):',
+  'KONTEKS PERANGKAT (snapshot maksimal 5 detik sekali):',
   '{device_status}',
   '',
   'ATURAN:',
+  "- Jika user tanya 'lokasi saya', utamakan jawab lokasi perangkat utama milik user ini.",
+  '- Jika user tanya lokasi device lain yang sudah dipairkan, sebut nama alias device lalu alamat detail terbarunya.',
+  '- Jika ada beberapa device, bedakan dengan jelas pakai nama alias masing-masing.',
   '- Jika user tanya lokasi, jawab pakai alamat detail terbaru, bukan koordinat mentah.',
   '- Jika user tanya status HP (baterai/jaringan), jawab pakai data terbaru.',
   '- Jika data kosong/unknown, jelaskan belum ada data terbaru.',

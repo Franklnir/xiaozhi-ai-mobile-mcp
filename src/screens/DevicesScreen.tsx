@@ -19,6 +19,8 @@ import {
   apiCreatePairToken,
   apiGetDevices,
   DeviceInfo,
+  DeviceLocationInfo,
+  apiGetDeviceLocations,
 } from '../api/client';
 import { deviceStore } from '../stores/deviceStore';
 import {
@@ -35,6 +37,14 @@ function formatDeviceAddress(device?: DeviceInfo | null) {
   return (
     device?.address_full ||
     [device?.address_street, device?.address_area, device?.address_city].filter(Boolean).join(', ') ||
+    'Alamat belum tersedia'
+  );
+}
+
+function formatLocationAddress(location?: DeviceLocationInfo | null) {
+  return (
+    location?.address_full ||
+    [location?.address_street, location?.address_area, location?.address_city].filter(Boolean).join(', ') ||
     'Alamat belum tersedia'
   );
 }
@@ -60,7 +70,10 @@ export default function DevicesScreen() {
   const [pairToken, setPairToken] = useState('');
   const [pairExpires, setPairExpires] = useState('');
   const [manualToken, setManualToken] = useState('');
-  const [manualAlias, setManualAlias] = useState('');
+  const [selectedMapDeviceId, setSelectedMapDeviceId] = useState('');
+  const [mapDeviceMenuOpen, setMapDeviceMenuOpen] = useState(false);
+  const [locationHistory, setLocationHistory] = useState<DeviceLocationInfo[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [bootError, setBootError] = useState('');
   const [pageScrollEnabled, setPageScrollEnabled] = useState(true);
@@ -81,10 +94,20 @@ export default function DevicesScreen() {
     try {
       const list = await apiGetDevices();
       setDevices(list || []);
+      setSelectedMapDeviceId((current) => {
+        const available = list || [];
+        if (current && available.some((item) => item.device_id === current)) {
+          return current;
+        }
+        if (deviceId && available.some((item) => item.device_id === deviceId)) {
+          return deviceId;
+        }
+        return available[0]?.device_id || current;
+      });
     } catch {
       // ignore
     }
-  }, []);
+  }, [deviceId]);
 
   useEffect(() => {
     let active = true;
@@ -95,6 +118,7 @@ export default function DevicesScreen() {
         if (!active) return;
         setDeviceId(reg.device_id);
         setDeviceToken(reg.device_token);
+        setSelectedMapDeviceId((current) => current || reg.device_id);
         const enabled = await isTrackingRunning();
         await deviceStore.setTrackingEnabled(enabled);
         if (!active) return;
@@ -121,6 +145,35 @@ export default function DevicesScreen() {
     }, TRACKING_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [loadDevices]);
+
+  useEffect(() => {
+    if (!selectedMapDeviceId) {
+      setLocationHistory([]);
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      setLoadingHistory(true);
+      try {
+        const history = await apiGetDeviceLocations(selectedMapDeviceId, 500);
+        if (!active) return;
+        setLocationHistory((history || []).slice().reverse());
+      } catch {
+        if (active) {
+          setLocationHistory([]);
+        }
+      } finally {
+        if (active) {
+          setLoadingHistory(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [selectedMapDeviceId]);
 
   async function toggleTracking() {
     try {
@@ -153,11 +206,24 @@ export default function DevicesScreen() {
       return;
     }
     try {
-      await apiClaimPairToken(manualToken.trim(), manualAlias.trim() || undefined);
+      const result = await apiClaimPairToken(manualToken.trim());
       setManualToken('');
-      setManualAlias('');
       await loadDevices();
-      Alert.alert('OK', 'Device berhasil ditambahkan');
+      if (result.device?.is_online) {
+        Alert.alert('Pair Berhasil', 'Perangkat tujuan sudah tersambung. Sekarang Anda bisa beri nama device.', [
+          { text: 'Nanti' },
+          {
+            text: 'Beri Nama',
+            onPress: () =>
+              navigation.navigate('DeviceDetail' as never, { deviceId: result.device_id } as never),
+          },
+        ]);
+      } else {
+        Alert.alert(
+          'Pair Berhasil',
+          'Perangkat sudah dipairkan. Tunggu sampai statusnya tersambung dulu, lalu beri nama dari detail device.',
+        );
+      }
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Gagal menambah device');
     }
@@ -173,16 +239,40 @@ export default function DevicesScreen() {
     }
   }
 
+  const myDevice = devices.find((d) => d.device_id === deviceId);
+  const myDeviceOnline = !!myDevice?.is_online;
+  const selectedMapDevice =
+    devices.find((item) => item.device_id === selectedMapDeviceId) ||
+    myDevice ||
+    devices[0] ||
+    null;
+  const selectedRoutePoints = locationHistory.filter(
+    (point) => point.latitude != null && point.longitude != null,
+  );
+  const selectedRouteLabel = selectedMapDevice
+    ? selectedMapDevice.device_id === deviceId
+      ? 'Lokasi milik saya'
+      : 'Lokasi device dipairkan'
+    : '-';
+
   const mapHtml = useMemo(() => {
-    const markers = devices
-      .filter((d) => d.latitude != null && d.longitude != null)
-      .map((d) => ({
-        name: d.alias || d.device_name || d.device_id,
-        lat: d.latitude,
-        lon: d.longitude,
-        addr: formatDeviceAddress(d),
-        status: d.is_online ? 'Online' : 'Offline',
-      }));
+    const currentMarker =
+      selectedMapDevice?.latitude != null && selectedMapDevice?.longitude != null
+        ? {
+            name: selectedMapDevice.alias || selectedMapDevice.device_name || selectedMapDevice.device_id,
+            lat: selectedMapDevice.latitude,
+            lon: selectedMapDevice.longitude,
+            addr: formatDeviceAddress(selectedMapDevice),
+            status: selectedMapDevice.is_online ? 'Online' : 'Offline',
+          }
+        : null;
+
+    const route = selectedRoutePoints.map((point) => ({
+      lat: point.latitude,
+      lon: point.longitude,
+      addr: formatLocationAddress(point),
+      at: point.recorded_at,
+    }));
 
     return `
       <!DOCTYPE html>
@@ -198,7 +288,8 @@ export default function DevicesScreen() {
           <div id="map"></div>
           <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
           <script>
-            const devices = ${JSON.stringify(markers)};
+            const route = ${JSON.stringify(route)};
+            const currentMarker = ${JSON.stringify(currentMarker)};
             const map = L.map('map', {
               zoomControl: true,
               dragging: true,
@@ -211,25 +302,49 @@ export default function DevicesScreen() {
               attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
             L.control.scale({ imperial: false }).addTo(map);
-            if (devices.length) {
-              const group = [];
-              devices.forEach(d => {
-                const m = L.marker([d.lat, d.lon]).addTo(map).bindPopup(
-                  '<b>' + d.name + '</b><br>' + (d.addr || '-') + '<br><span style="color:#475569;font-size:12px;">' + d.status + '</span>'
-                );
-                group.push(m);
-              });
-              const bounds = L.featureGroup(group).getBounds();
-              map.fitBounds(bounds.pad(0.2), { maxZoom: 16 });
+            const layers = [];
+            if (route.length > 1) {
+              const polyline = L.polyline(route.map(p => [p.lat, p.lon]), {
+                color: '#2563eb',
+                weight: 5,
+                opacity: 0.9
+              }).addTo(map);
+              layers.push(polyline);
+
+              const start = route[0];
+              const end = route[route.length - 1];
+              const startMarker = L.circleMarker([start.lat, start.lon], {
+                radius: 7,
+                color: '#16a34a',
+                fillColor: '#22c55e',
+                fillOpacity: 1
+              }).addTo(map).bindPopup('<b>Mulai</b><br>' + (start.addr || '-') + '<br>' + (start.at || '-'));
+              const endMarker = L.circleMarker([end.lat, end.lon], {
+                radius: 7,
+                color: '#dc2626',
+                fillColor: '#ef4444',
+                fillOpacity: 1
+              }).addTo(map).bindPopup('<b>Terakhir</b><br>' + (end.addr || '-') + '<br>' + (end.at || '-'));
+              layers.push(startMarker);
+              layers.push(endMarker);
+            }
+
+            if (currentMarker) {
+              const marker = L.marker([currentMarker.lat, currentMarker.lon]).addTo(map).bindPopup(
+                '<b>' + currentMarker.name + '</b><br>' + (currentMarker.addr || '-') + '<br><span style="color:#475569;font-size:12px;">' + currentMarker.status + '</span>'
+              );
+              layers.push(marker);
+            }
+
+            if (layers.length) {
+              const bounds = L.featureGroup(layers).getBounds();
+              map.fitBounds(bounds.pad(0.18), { maxZoom: 16 });
             }
           </script>
         </body>
       </html>
     `;
-  }, [devices]);
-
-  const myDevice = devices.find((d) => d.device_id === deviceId);
-  const myDeviceOnline = !!myDevice?.is_online;
+  }, [selectedMapDevice, selectedRoutePoints]);
 
   const animStyle = {
     opacity: enterAnim,
@@ -313,18 +428,14 @@ export default function DevicesScreen() {
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Tambah Device</Text>
+            <Text style={styles.cardMeta}>
+              Pair dulu perangkat tujuan. Setelah statusnya benar-benar tersambung, baru beri nama device dari halaman detail.
+            </Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { marginTop: 10 }]}
               value={manualToken}
               onChangeText={setManualToken}
               placeholder="Pair token"
-              placeholderTextColor={theme.colors.textMuted}
-            />
-            <TextInput
-              style={[styles.input, { marginTop: 8 }]}
-              value={manualAlias}
-              onChangeText={setManualAlias}
-              placeholder="Nama lokasi (opsional)"
               placeholderTextColor={theme.colors.textMuted}
             />
             <View style={styles.btnRow}>
@@ -342,7 +453,70 @@ export default function DevicesScreen() {
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Peta Lokasi</Text>
-            <Text style={styles.cardMeta}>Geser peta untuk pantau lokasi, cubit untuk zoom, dan tap marker untuk lihat alamat detail.</Text>
+            <Text style={styles.cardMeta}>
+              Default menampilkan peta lokasi milik Anda. Buka dropdown di bawah untuk pindah ke device lain yang sudah dipairkan.
+            </Text>
+            <TouchableOpacity
+              style={styles.dropdownTrigger}
+              onPress={() => setMapDeviceMenuOpen((open) => !open)}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dropdownLabel}>Pilih Lokasi Device</Text>
+                <Text style={styles.dropdownValue}>
+                  {selectedMapDevice
+                    ? `${selectedMapDevice.alias || selectedMapDevice.device_name || selectedMapDevice.device_id}`
+                    : 'Belum ada device'}
+                </Text>
+                <Text style={styles.dropdownHint}>{selectedRouteLabel}</Text>
+              </View>
+              <Text style={styles.dropdownChevron}>{mapDeviceMenuOpen ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+            {mapDeviceMenuOpen ? (
+              <View style={styles.dropdownMenu}>
+                {devices.map((item) => {
+                  const active = item.device_id === selectedMapDeviceId;
+                  return (
+                    <TouchableOpacity
+                      key={item.device_id}
+                      style={[styles.dropdownItem, active && styles.dropdownItemActive]}
+                      onPress={() => {
+                        setSelectedMapDeviceId(item.device_id);
+                        setMapDeviceMenuOpen(false);
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.dropdownItemTitle}>
+                          {item.alias || item.device_name || item.device_id}
+                        </Text>
+                        <Text style={styles.dropdownItemMeta}>
+                          {item.device_id === deviceId ? 'Lokasi milik saya' : 'Device hasil pair'}
+                        </Text>
+                      </View>
+                      <Text style={[styles.dropdownItemStatus, item.is_online ? styles.online : styles.offline]}>
+                        {item.is_online ? 'Online' : 'Offline'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
+            <View style={styles.routeSummaryBox}>
+              <Text style={styles.routeSummaryTitle}>
+                {selectedMapDevice
+                  ? `Rute: ${selectedMapDevice.alias || selectedMapDevice.device_name || selectedMapDevice.device_id}`
+                  : 'Rute device'}
+              </Text>
+              <Text style={styles.cardMeta}>
+                {loadingHistory
+                  ? 'Memuat history perjalanan...'
+                  : selectedRoutePoints.length > 1
+                  ? `Jejak perjalanan terbaca ${selectedRoutePoints.length} titik.`
+                  : 'Jejak perjalanan belum cukup. Gerakkan perangkat agar rutenya tergambar.'}
+              </Text>
+              <Text style={styles.cardMeta}>
+                Lokasi terakhir: {selectedRoutePoints.length ? formatLocationAddress(selectedRoutePoints[selectedRoutePoints.length - 1]) : formatDeviceAddress(selectedMapDevice)}
+              </Text>
+            </View>
             <View
               style={styles.mapBox}
               onTouchStart={() => setPageScrollEnabled(false)}
@@ -361,6 +535,9 @@ export default function DevicesScreen() {
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Daftar Device</Text>
+            <Text style={styles.cardMeta}>
+              Buka detail device untuk ganti nama, reset nama bawaan, atau hapus pair untuk device lain.
+            </Text>
             {devices.length === 0 ? (
               <Text style={styles.muted}>Belum ada device.</Text>
             ) : (
@@ -534,6 +711,94 @@ const createStyles = (theme: Theme) =>
       borderWidth: theme.isNeo ? 2 : 1,
       borderColor: theme.colors.panelBorder,
       fontFamily: theme.fonts.body,
+    },
+    dropdownTrigger: {
+      marginTop: theme.spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.surfaceLight,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+    },
+    dropdownLabel: {
+      color: theme.colors.textMuted,
+      fontSize: 10,
+      fontFamily: theme.fonts.body,
+    },
+    dropdownValue: {
+      marginTop: 2,
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
+    },
+    dropdownHint: {
+      marginTop: 2,
+      color: theme.colors.textSecondary,
+      fontSize: 10,
+      fontFamily: theme.fonts.body,
+    },
+    dropdownChevron: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
+    dropdownMenu: {
+      marginTop: theme.spacing.sm,
+      borderRadius: theme.radius.md,
+      overflow: 'hidden',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      backgroundColor: theme.colors.surfaceLight,
+    },
+    dropdownItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.panelBorder,
+    },
+    dropdownItemActive: {
+      backgroundColor: theme.isNeo ? '#fff7ed' : 'rgba(59,130,246,0.08)',
+    },
+    dropdownItemTitle: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
+    },
+    dropdownItemMeta: {
+      marginTop: 2,
+      color: theme.colors.textSecondary,
+      fontSize: 10,
+      fontFamily: theme.fonts.body,
+    },
+    dropdownItemStatus: {
+      fontSize: theme.fontSize.xs,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
+    routeSummaryBox: {
+      marginTop: theme.spacing.md,
+      padding: theme.spacing.sm,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.isNeo ? '#fff7ed' : 'rgba(59,130,246,0.08)',
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.isNeo ? theme.colors.black : 'rgba(59,130,246,0.18)',
+    },
+    routeSummaryTitle: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
     },
     mapBox: { height: 300, borderRadius: theme.radius.lg, overflow: 'hidden', marginTop: theme.spacing.md },
     muted: { color: theme.colors.textMuted, fontFamily: theme.fonts.body },

@@ -21,12 +21,15 @@ interface LoginScreenProps {
   onLoginSuccess?: () => void;
 }
 
-type LangKey = 'id' | 'en' | 'ar';
+type LangKey = 'id' | 'en' | 'ar' | 'zh' | 'ru' | 'vi';
 
 const LANG_OPTIONS: { key: LangKey; label: string }[] = [
   { key: 'id', label: 'ID' },
   { key: 'en', label: 'EN' },
   { key: 'ar', label: 'AR' },
+  { key: 'zh', label: 'ZH' },
+  { key: 'ru', label: 'RU' },
+  { key: 'vi', label: 'VI' },
 ];
 
 const TEXT: Record<LangKey, Record<string, string>> = {
@@ -93,6 +96,69 @@ const TEXT: Record<LangKey, Record<string, string>> = {
     codeRequired: 'رمز التسجيل مطلوب',
     registerNoCode: 'التسجيل بدون رمز (من الإعدادات).',
   },
+  zh: {
+    login: '登录',
+    register: '注册',
+    loginSubtitle: `使用您的 ${APP_PUBLIC_NAME} 账号登录`,
+    registerSubtitle: `创建新的 ${APP_PUBLIC_NAME} 账号`,
+    backend: '后端',
+    backendHint: '后端地址已经内置在此 APK 中，普通用户无需手动填写服务器 URL。',
+    username: '用户名',
+    password: '密码',
+    confirmPassword: '确认密码',
+    registerCode: '注册码',
+    loginBtn: '登录',
+    registerBtn: '注册',
+    haveAccount: '已经有账号？',
+    noAccount: '还没有账号？',
+    switchToLogin: '在这里登录',
+    switchToRegister: '在这里注册',
+    required: '所有字段都必须填写',
+    codeRequired: '必须填写注册码',
+    registerNoCode: '无需注册码注册（由管理员设置）。',
+  },
+  ru: {
+    login: 'Вход',
+    register: 'Регистрация',
+    loginSubtitle: `Войдите с аккаунтом ${APP_PUBLIC_NAME}`,
+    registerSubtitle: `Создайте новый аккаунт ${APP_PUBLIC_NAME}`,
+    backend: 'Бэкенд',
+    backendHint: 'Адрес сервера уже встроен в этот APK, поэтому обычному пользователю не нужно вводить URL вручную.',
+    username: 'Имя пользователя',
+    password: 'Пароль',
+    confirmPassword: 'Подтвердите пароль',
+    registerCode: 'Код регистрации',
+    loginBtn: 'Войти',
+    registerBtn: 'Создать аккаунт',
+    haveAccount: 'Уже есть аккаунт?',
+    noAccount: 'Нет аккаунта?',
+    switchToLogin: 'Войти здесь',
+    switchToRegister: 'Зарегистрироваться здесь',
+    required: 'Все поля обязательны',
+    codeRequired: 'Нужен код регистрации',
+    registerNoCode: 'Регистрация без кода (настраивается админом).',
+  },
+  vi: {
+    login: 'Đăng nhập',
+    register: 'Đăng ký',
+    loginSubtitle: `Đăng nhập bằng tài khoản ${APP_PUBLIC_NAME}`,
+    registerSubtitle: `Tạo tài khoản ${APP_PUBLIC_NAME} mới`,
+    backend: 'Backend',
+    backendHint: 'Địa chỉ backend đã được nhúng sẵn trong APK này nên người dùng không cần nhập URL máy chủ thủ công.',
+    username: 'Tên đăng nhập',
+    password: 'Mật khẩu',
+    confirmPassword: 'Xác nhận mật khẩu',
+    registerCode: 'Mã đăng ký',
+    loginBtn: 'Đăng nhập',
+    registerBtn: 'Đăng ký',
+    haveAccount: 'Đã có tài khoản?',
+    noAccount: 'Chưa có tài khoản?',
+    switchToLogin: 'Đăng nhập tại đây',
+    switchToRegister: 'Đăng ký tại đây',
+    required: 'Vui lòng điền đầy đủ tất cả trường',
+    codeRequired: 'Bắt buộc nhập mã đăng ký',
+    registerNoCode: 'Đăng ký không cần mã (do quản trị viên thiết lập).',
+  },
 };
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
@@ -115,7 +181,14 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       const saved = await authStore.getServerUrl();
       setBackendUrl(saved);
       const savedLang = await authStore.getLanguage();
-      if (savedLang === 'id' || savedLang === 'en' || savedLang === 'ar') {
+      if (
+        savedLang === 'id' ||
+        savedLang === 'en' ||
+        savedLang === 'ar' ||
+        savedLang === 'zh' ||
+        savedLang === 'ru' ||
+        savedLang === 'vi'
+      ) {
         setLanguage(savedLang);
       }
       try {

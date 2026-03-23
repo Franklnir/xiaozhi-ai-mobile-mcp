@@ -7,8 +7,8 @@ import { apiDeviceHeartbeat, apiRegisterDevice } from '../api/client';
 import { deviceStore } from '../stores/deviceStore';
 
 const sleep = (time: number) => new Promise((resolve) => setTimeout(resolve, time));
-export const TRACKING_INTERVAL_MS = 5 * 60 * 1000;
-export const TRACKING_INTERVAL_LABEL = '5 menit';
+export const TRACKING_INTERVAL_MS = 5 * 1000;
+export const TRACKING_INTERVAL_LABEL = '5 detik';
 let trackingStartPromise: Promise<void> | null = null;
 const ANDROID_VERSION = Platform.OS === 'android' ? Number(Platform.Version) : 0;
 
