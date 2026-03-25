@@ -13,7 +13,8 @@ import DeviceDetailScreen from '../screens/DeviceDetailScreen';
 import QrScannerScreen from '../screens/QrScannerScreen';
 import PermissionGateScreen from '../screens/PermissionGateScreen';
 import { authStore } from '../stores/authStore';
-import { resumeTrackingIfEnabled } from '../services/deviceService';
+import { resumeTrackingIfEnabled, startForegroundDeviceSync, stopForegroundDeviceSync } from '../services/deviceService';
+import { connectRealtime, disconnectRealtime } from '../services/realtimeService';
 import { useTheme } from '../theme/theme';
 
 const Tab = createBottomTabNavigator();
@@ -103,14 +104,23 @@ export default function AppNavigator() {
 
   useEffect(() => {
     if (!token || !permissionsReady) {
+      stopForegroundDeviceSync();
+      disconnectRealtime();
       return;
     }
+
+    startForegroundDeviceSync();
+    connectRealtime().catch(() => {});
 
     const timer = setTimeout(() => {
       resumeTrackingIfEnabled().catch(() => {});
     }, 1600);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      stopForegroundDeviceSync();
+      disconnectRealtime();
+    };
   }, [token, permissionsReady]);
 
   if (checkingAuth) return null;

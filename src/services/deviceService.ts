@@ -7,9 +7,10 @@ import { apiDeviceHeartbeat, apiRegisterDevice } from '../api/client';
 import { deviceStore } from '../stores/deviceStore';
 
 const sleep = (time: number) => new Promise((resolve) => setTimeout(resolve, time));
-export const TRACKING_INTERVAL_MS = 5 * 1000;
-export const TRACKING_INTERVAL_LABEL = '5 detik';
+export const TRACKING_INTERVAL_MS = 2 * 1000;
+export const TRACKING_INTERVAL_LABEL = '2 detik';
 let trackingStartPromise: Promise<void> | null = null;
+let foregroundSyncTimer: ReturnType<typeof setInterval> | null = null;
 const ANDROID_VERSION = Platform.OS === 'android' ? Number(Platform.Version) : 0;
 
 type AndroidPermission = Parameters<typeof PermissionsAndroid.check>[0];
@@ -257,14 +258,28 @@ export async function requestTrackingPermissions(): Promise<TrackingPermissionSu
 }
 
 export async function openAppSettings() {
+  if (Platform.OS === 'android' && typeof Linking.sendIntent === 'function') {
+    try {
+      await Linking.sendIntent('android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS');
+      return;
+    } catch {
+      // fall through to app settings
+    }
+  }
   await Linking.openSettings();
+}
+
+function normalizeTrackingNote(note?: string) {
+  const cleaned = (note || '').trim();
+  if (!cleaned) return '';
+  return cleaned.length > 96 ? `${cleaned.slice(0, 93)}...` : cleaned;
 }
 
 function buildTrackingNotificationMeta(isOnline: boolean, note?: string) {
   return {
     taskTitle: isOnline ? 'xiaozhiscig monitor online' : 'xiaozhiscig monitor offline',
     taskDesc: note
-      ? `${isOnline ? 'Online' : 'Offline'} • ${note}`
+      ? `${isOnline ? 'Online' : 'Offline'} • ${normalizeTrackingNote(note)}`
       : `${isOnline ? 'Online' : 'Offline'} • sinkron tiap ${TRACKING_INTERVAL_LABEL}`,
   };
 }
@@ -402,6 +417,10 @@ export async function sendHeartbeat() {
   });
 }
 
+function extractHeartbeatNote(response?: { address?: { full?: string; city?: string; area?: string; street?: string } }) {
+  return response?.address?.full || response?.address?.street || response?.address?.area || response?.address?.city || 'lokasi belum tersedia';
+}
+
 const trackingOptions = {
   taskName: 'SciG Tracking',
   taskTitle: 'xiaozhiscig monitor latar belakang',
@@ -417,14 +436,42 @@ const trackingOptions = {
 const trackingTask = async () => {
   while (BackgroundService.isRunning()) {
     try {
-      await sendHeartbeat();
-      await updateTrackingNotification(true, `sinkron tiap ${TRACKING_INTERVAL_LABEL}`);
+      const response = await sendHeartbeat();
+      await updateTrackingNotification(true, extractHeartbeatNote(response));
     } catch {
       await updateTrackingNotification(false, 'cek koneksi, lokasi, atau izin notifikasi');
     }
     await sleep(TRACKING_INTERVAL_MS);
   }
 };
+
+async function runForegroundSyncCycle() {
+  if (BackgroundService.isRunning()) {
+    return;
+  }
+  try {
+    await sendHeartbeat();
+  } catch {
+    // ignore foreground sync failures
+  }
+}
+
+export function startForegroundDeviceSync() {
+  if (foregroundSyncTimer) {
+    return;
+  }
+  runForegroundSyncCycle().catch(() => {});
+  foregroundSyncTimer = setInterval(() => {
+    runForegroundSyncCycle().catch(() => {});
+  }, TRACKING_INTERVAL_MS);
+}
+
+export function stopForegroundDeviceSync() {
+  if (foregroundSyncTimer) {
+    clearInterval(foregroundSyncTimer);
+    foregroundSyncTimer = null;
+  }
+}
 
 export async function startTracking(options: { skipPermissionCheck?: boolean } = {}) {
   if (trackingStartPromise) {
@@ -441,8 +488,11 @@ export async function startTracking(options: { skipPermissionCheck?: boolean } =
 
     try {
       let synced = false;
+      let firstHeartbeatNote = '';
       try {
-        await syncDeviceSnapshot();
+        await registerDevice();
+        const response = await sendHeartbeat();
+        firstHeartbeatNote = extractHeartbeatNote(response);
         synced = true;
       } catch {
         synced = false;
@@ -452,7 +502,7 @@ export async function startTracking(options: { skipPermissionCheck?: boolean } =
       }
       await updateTrackingNotification(
         synced,
-        synced ? `sinkron tiap ${TRACKING_INTERVAL_LABEL}` : 'menunggu sinkron pertama',
+        synced ? firstHeartbeatNote || `sinkron tiap ${TRACKING_INTERVAL_LABEL}` : 'menunggu sinkron pertama',
       );
     } catch {
       await deviceStore.setTrackingEnabled(false);

@@ -175,7 +175,7 @@ export default function DashboardScreen({ onLogout, onSettings }: DashboardScree
               codes.map((c, i) => (
                 <View key={i} style={styles.codeCard}>
                   <View style={styles.codeRow}>
-                    <Text style={styles.codeText}>{c.code}</Text>
+                    <Text style={styles.codeText}>{c.code_display || c.code || 'MCP aktif'}</Text>
                     <View style={[styles.statusDot, c.is_connected ? styles.dotOnline : styles.dotOffline]} />
                   </View>
                   <Text style={styles.codeStatus}>

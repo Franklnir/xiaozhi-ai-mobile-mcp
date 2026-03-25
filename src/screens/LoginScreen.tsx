@@ -24,12 +24,12 @@ interface LoginScreenProps {
 type LangKey = 'id' | 'en' | 'ar' | 'zh' | 'ru' | 'vi';
 
 const LANG_OPTIONS: { key: LangKey; label: string }[] = [
-  { key: 'id', label: 'ID' },
-  { key: 'en', label: 'EN' },
-  { key: 'ar', label: 'AR' },
-  { key: 'zh', label: 'ZH' },
-  { key: 'ru', label: 'RU' },
-  { key: 'vi', label: 'VI' },
+  { key: 'id', label: 'Indonesia' },
+  { key: 'en', label: 'English' },
+  { key: 'ar', label: 'العربية' },
+  { key: 'zh', label: '中文' },
+  { key: 'ru', label: 'Русский' },
+  { key: 'vi', label: 'Tiếng Việt' },
 ];
 
 const TEXT: Record<LangKey, Record<string, string>> = {
@@ -38,8 +38,6 @@ const TEXT: Record<LangKey, Record<string, string>> = {
     register: 'Register',
     loginSubtitle: `Masuk dengan akun ${APP_PUBLIC_NAME} Anda`,
     registerSubtitle: `Buat akun baru ${APP_PUBLIC_NAME}`,
-    backend: 'Backend',
-    backendHint: 'Alamat server sudah ditanam di APK ini, jadi user tidak perlu isi URL manual.',
     username: 'Username',
     password: 'Password',
     confirmPassword: 'Konfirmasi Password',
@@ -53,14 +51,13 @@ const TEXT: Record<LangKey, Record<string, string>> = {
     required: 'Semua field wajib diisi',
     codeRequired: 'Kode register wajib diisi',
     registerNoCode: 'Registrasi tanpa code (diset oleh admin).',
+    language: 'Bahasa',
   },
   en: {
     login: 'Login',
     register: 'Register',
     loginSubtitle: `Sign in with your ${APP_PUBLIC_NAME} account`,
     registerSubtitle: `Create a new ${APP_PUBLIC_NAME} account`,
-    backend: 'Backend',
-    backendHint: 'The backend address is bundled into this APK, so end users do not need to type a server URL.',
     username: 'Username',
     password: 'Password',
     confirmPassword: 'Confirm Password',
@@ -74,14 +71,13 @@ const TEXT: Record<LangKey, Record<string, string>> = {
     required: 'All fields are required',
     codeRequired: 'Register code is required',
     registerNoCode: 'Registration without code (set by admin).',
+    language: 'Language',
   },
   ar: {
     login: 'تسجيل الدخول',
     register: 'تسجيل',
     loginSubtitle: `سجّل الدخول بحساب ${APP_PUBLIC_NAME}`,
     registerSubtitle: `أنشئ حساب ${APP_PUBLIC_NAME} جديد`,
-    backend: 'الخادم',
-    backendHint: 'عنوان الخادم مدمج داخل ملف APK، لذلك لا يحتاج المستخدم لإدخال الرابط يدويًا.',
     username: 'اسم المستخدم',
     password: 'كلمة المرور',
     confirmPassword: 'تأكيد كلمة المرور',
@@ -95,14 +91,13 @@ const TEXT: Record<LangKey, Record<string, string>> = {
     required: 'جميع الحقول مطلوبة',
     codeRequired: 'رمز التسجيل مطلوب',
     registerNoCode: 'التسجيل بدون رمز (من الإعدادات).',
+    language: 'اللغة',
   },
   zh: {
     login: '登录',
     register: '注册',
     loginSubtitle: `使用您的 ${APP_PUBLIC_NAME} 账号登录`,
     registerSubtitle: `创建新的 ${APP_PUBLIC_NAME} 账号`,
-    backend: '后端',
-    backendHint: '后端地址已经内置在此 APK 中，普通用户无需手动填写服务器 URL。',
     username: '用户名',
     password: '密码',
     confirmPassword: '确认密码',
@@ -116,14 +111,13 @@ const TEXT: Record<LangKey, Record<string, string>> = {
     required: '所有字段都必须填写',
     codeRequired: '必须填写注册码',
     registerNoCode: '无需注册码注册（由管理员设置）。',
+    language: '语言',
   },
   ru: {
     login: 'Вход',
     register: 'Регистрация',
     loginSubtitle: `Войдите с аккаунтом ${APP_PUBLIC_NAME}`,
     registerSubtitle: `Создайте новый аккаунт ${APP_PUBLIC_NAME}`,
-    backend: 'Бэкенд',
-    backendHint: 'Адрес сервера уже встроен в этот APK, поэтому обычному пользователю не нужно вводить URL вручную.',
     username: 'Имя пользователя',
     password: 'Пароль',
     confirmPassword: 'Подтвердите пароль',
@@ -137,14 +131,13 @@ const TEXT: Record<LangKey, Record<string, string>> = {
     required: 'Все поля обязательны',
     codeRequired: 'Нужен код регистрации',
     registerNoCode: 'Регистрация без кода (настраивается админом).',
+    language: 'Язык',
   },
   vi: {
     login: 'Đăng nhập',
     register: 'Đăng ký',
     loginSubtitle: `Đăng nhập bằng tài khoản ${APP_PUBLIC_NAME}`,
     registerSubtitle: `Tạo tài khoản ${APP_PUBLIC_NAME} mới`,
-    backend: 'Backend',
-    backendHint: 'Địa chỉ backend đã được nhúng sẵn trong APK này nên người dùng không cần nhập URL máy chủ thủ công.',
     username: 'Tên đăng nhập',
     password: 'Mật khẩu',
     confirmPassword: 'Xác nhận mật khẩu',
@@ -158,14 +151,15 @@ const TEXT: Record<LangKey, Record<string, string>> = {
     required: 'Vui lòng điền đầy đủ tất cả trường',
     codeRequired: 'Bắt buộc nhập mã đăng ký',
     registerNoCode: 'Đăng ký không cần mã (do quản trị viên thiết lập).',
+    language: 'Ngôn ngữ',
   },
 };
 
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const { theme } = useTheme();
-  const [backendUrl, setBackendUrl] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const [language, setLanguage] = useState<LangKey>('id');
+  const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [registerRequiresCode, setRegisterRequiresCode] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -178,8 +172,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
   useEffect(() => {
     (async () => {
-      const saved = await authStore.getServerUrl();
-      setBackendUrl(saved);
+      const savedUrl = await authStore.getServerUrl();
       const savedLang = await authStore.getLanguage();
       if (
         savedLang === 'id' ||
@@ -192,10 +185,10 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         setLanguage(savedLang);
       }
       try {
-        const settings = await apiGetPublicSettings(saved);
+        const settings = await apiGetPublicSettings(savedUrl);
         setRegisterRequiresCode(settings.register_requires_code !== false);
       } catch {
-        // ignore
+        // ignore settings bootstrap failures
       }
     })();
   }, []);
@@ -212,6 +205,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
   const styles = useMemo(() => createStyles(theme), [theme]);
   const t = (key: string) => TEXT[language]?.[key] || TEXT.id[key] || key;
+  const activeLanguageLabel = LANG_OPTIONS.find((opt) => opt.key === language)?.label || 'Indonesia';
 
   const logoAnimStyle = {
     opacity: enterAnim,
@@ -240,6 +234,12 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   function switchMode(nextIsRegister: boolean) {
     setIsRegister(nextIsRegister);
     setError('');
+  }
+
+  function selectLanguage(nextLanguage: LangKey) {
+    setLanguage(nextLanguage);
+    setLanguageMenuOpen(false);
+    authStore.setLanguage(nextLanguage).catch(() => {});
   }
 
   async function handleLogin() {
@@ -303,33 +303,43 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.langSelector}>
-        {LANG_OPTIONS.map((opt) => {
-          const active = language === opt.key;
-          return (
-            <TouchableOpacity
-              key={opt.key}
-              style={[styles.langChip, active && styles.langChipActive]}
-              onPress={() => {
-                setLanguage(opt.key);
-                authStore.setLanguage(opt.key).catch(() => {});
-              }}
-            >
-              <Text style={[styles.langChipText, active && styles.langChipTextActive]}>{opt.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View style={styles.langSelectorWrap}>
+        <TouchableOpacity
+          style={styles.langTrigger}
+          onPress={() => setLanguageMenuOpen((open) => !open)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.langTriggerLabel}>{t('language')}</Text>
+            <Text style={styles.langTriggerValue}>{activeLanguageLabel}</Text>
+          </View>
+          <Text style={styles.langTriggerChevron}>{languageMenuOpen ? '▲' : '▼'}</Text>
+        </TouchableOpacity>
+        {languageMenuOpen ? (
+          <View style={styles.langMenu}>
+            {LANG_OPTIONS.map((opt) => {
+              const active = language === opt.key;
+              return (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.langMenuItem, active && styles.langMenuItemActive]}
+                  onPress={() => selectLanguage(opt.key)}
+                >
+                  <Text style={[styles.langMenuText, active && styles.langMenuTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* Logo area */}
         <Animated.View style={[styles.logoArea, logoAnimStyle]}>
-          <Text style={styles.logoIcon}>🤖</Text>
+          <Text style={styles.logoIcon}>AI</Text>
           <Text style={styles.logoTitle}>{APP_PUBLIC_NAME}</Text>
           <Text style={styles.logoSubtitle}>Xiaozhi AI Controller</Text>
         </Animated.View>
 
-        {/* Login card */}
         <Animated.View style={[styles.card, cardAnimStyle]}>
           <Text style={styles.cardTitle}>{isRegister ? t('register') : t('login')}</Text>
           <Text style={styles.cardSubtitle}>
@@ -338,15 +348,9 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
           {error ? (
             <View style={styles.errorBox}>
-              <Text style={styles.errorText}>⚠️ {error}</Text>
+              <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
-
-          <View style={styles.backendBox}>
-            <Text style={styles.backendLabel}>{t('backend')}</Text>
-            <Text style={styles.backendValue}>{backendUrl}</Text>
-            <Text style={styles.backendHint}>{t('backendHint')}</Text>
-          </View>
 
           <Text style={styles.label}>{t('username')}</Text>
           <TextInput
@@ -374,7 +378,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
               onPress={() => setShowPassword((prev) => !prev)}
               activeOpacity={0.7}
             >
-              <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
+              <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -395,7 +399,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   onPress={() => setShowConfirmPassword((prev) => !prev)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.eyeText}>{showConfirmPassword ? '🙈' : '👁'}</Text>
+                  <Text style={styles.eyeText}>{showConfirmPassword ? 'Hide' : 'Show'}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -433,10 +437,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
           <Text style={styles.hint}>
             {isRegister ? t('haveAccount') : t('noAccount')}{' '}
-            <Text
-              style={styles.hintLink}
-              onPress={() => switchMode(!isRegister)}
-            >
+            <Text style={styles.hintLink} onPress={() => switchMode(!isRegister)}>
               {isRegister ? t('switchToLogin') : t('switchToRegister')}
             </Text>
           </Text>
@@ -452,32 +453,68 @@ const createStyles = (theme: Theme) =>
       flex: 1,
       backgroundColor: theme.colors.bg,
     },
-    langSelector: {
+    langSelectorWrap: {
       position: 'absolute',
       top: theme.spacing.lg,
-      left: theme.spacing.lg,
-      flexDirection: 'row',
-      gap: theme.spacing.xs,
-      zIndex: 10,
+      right: theme.spacing.lg,
+      width: 176,
+      zIndex: 20,
     },
-    langChip: {
+    langTrigger: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
       backgroundColor: theme.colors.surface,
       borderWidth: theme.isNeo ? 2 : 1,
       borderColor: theme.colors.panelBorder,
-      borderRadius: theme.radius.full,
+      borderRadius: theme.radius.md,
       paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.xs,
+      paddingVertical: theme.spacing.sm,
+      ...theme.effects.cardShadow,
     },
-    langChipActive: {
-      backgroundColor: theme.colors.accentLight,
-      borderColor: theme.isNeo ? theme.colors.black : theme.colors.accent,
-    },
-    langChipText: {
+    langTriggerLabel: {
       fontSize: theme.fontSize.xs,
-      color: theme.colors.textSecondary,
+      color: theme.colors.textMuted,
       fontFamily: theme.fonts.body,
     },
-    langChipTextActive: {
+    langTriggerValue: {
+      marginTop: 2,
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.text,
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
+    },
+    langTriggerChevron: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
+    langMenu: {
+      marginTop: theme.spacing.xs,
+      borderRadius: theme.radius.md,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.isNeo ? 2 : 1,
+      borderColor: theme.colors.panelBorder,
+      ...theme.effects.cardShadow,
+    },
+    langMenuItem: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderTopWidth: theme.isNeo ? 2 : 1,
+      borderTopColor: theme.colors.panelBorder,
+      backgroundColor: theme.colors.surface,
+    },
+    langMenuItemActive: {
+      backgroundColor: theme.colors.accentLight,
+    },
+    langMenuText: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontFamily: theme.fonts.body,
+    },
+    langMenuTextActive: {
       color: theme.colors.black,
       fontWeight: '700',
       fontFamily: theme.fonts.heading,
@@ -486,14 +523,26 @@ const createStyles = (theme: Theme) =>
       flexGrow: 1,
       justifyContent: 'center',
       padding: theme.spacing.xl,
+      paddingTop: theme.spacing.xxl * 2,
     },
     logoArea: {
       alignItems: 'center',
       marginBottom: theme.spacing.xxl,
     },
     logoIcon: {
-      fontSize: 56,
+      width: 72,
+      height: 72,
+      borderRadius: 999,
+      overflow: 'hidden',
+      textAlign: 'center',
+      textAlignVertical: 'center',
+      lineHeight: 72,
+      fontSize: 24,
+      fontWeight: '800',
+      color: theme.colors.black,
+      backgroundColor: theme.colors.accentLight,
       marginBottom: theme.spacing.sm,
+      fontFamily: theme.fonts.heading,
     },
     logoTitle: {
       fontSize: theme.fontSize.xxl,
@@ -539,33 +588,6 @@ const createStyles = (theme: Theme) =>
     errorText: {
       color: theme.isNeo ? theme.colors.redDark : '#fca5a5',
       fontSize: theme.fontSize.sm,
-      fontFamily: theme.fonts.body,
-    },
-    backendBox: {
-      marginTop: theme.spacing.md,
-      backgroundColor: theme.isNeo ? '#fff7ed' : theme.colors.surface,
-      borderWidth: theme.isNeo ? 2 : 1,
-      borderColor: theme.colors.panelBorder,
-      borderRadius: theme.radius.md,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.md,
-    },
-    backendLabel: {
-      fontSize: theme.fontSize.xs,
-      color: theme.colors.textSecondary,
-      fontFamily: theme.fonts.body,
-    },
-    backendValue: {
-      marginTop: theme.spacing.xs,
-      fontSize: theme.fontSize.sm,
-      color: theme.colors.text,
-      fontFamily: theme.fonts.mono,
-    },
-    backendHint: {
-      marginTop: theme.spacing.sm,
-      fontSize: theme.fontSize.xs,
-      lineHeight: 18,
-      color: theme.colors.textMuted,
       fontFamily: theme.fonts.body,
     },
     label: {
@@ -614,37 +636,36 @@ const createStyles = (theme: Theme) =>
     },
     eyeText: {
       color: theme.colors.textSecondary,
-      fontSize: theme.fontSize.md,
+      fontSize: theme.fontSize.xs,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
     },
     button: {
       backgroundColor: theme.colors.accent,
       borderRadius: theme.radius.md,
-      paddingVertical: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
       alignItems: 'center',
-      justifyContent: 'center',
       marginTop: theme.spacing.xl,
-      borderWidth: theme.isNeo ? 2 : 0,
-      borderColor: theme.isNeo ? theme.colors.black : 'transparent',
-      ...theme.effects.buttonShadow,
     },
     buttonDisabled: {
-      opacity: 0.6,
+      opacity: 0.7,
     },
     buttonText: {
       color: theme.colors.white,
-      fontSize: theme.fontSize.lg,
+      fontSize: theme.fontSize.md,
       fontWeight: '700',
-      fontFamily: theme.fonts.heading,
+      fontFamily: theme.fonts.body,
     },
     hint: {
-      textAlign: 'center',
-      fontSize: theme.fontSize.xs,
-      color: theme.colors.textMuted,
       marginTop: theme.spacing.lg,
+      textAlign: 'center',
+      color: theme.colors.textSecondary,
+      fontSize: theme.fontSize.sm,
       fontFamily: theme.fonts.body,
     },
     hintLink: {
       color: theme.colors.accentLight,
-      textDecorationLine: 'underline',
+      fontWeight: '700',
+      fontFamily: theme.fonts.heading,
     },
   });

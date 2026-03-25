@@ -9,14 +9,24 @@ import {
   Easing,
 } from 'react-native';
 import { Theme, useTheme } from '../theme/theme';
-import { apiGetActiveMode, apiGetLastDevice, apiGetMyCodes, McpCodeInfo, ModeInfo } from '../api/client';
+import { apiGetActiveMode, apiGetLastDevice, apiGetMyCodes, LastDeviceInfo, McpCodeInfo, ModeInfo } from '../api/client';
+import { subscribeRealtime } from '../services/realtimeService';
+
+function formatDateTime(value?: string) {
+  if (!value) return '-';
+  try {
+    return new Date(value).toLocaleString('id-ID');
+  } catch {
+    return value;
+  }
+}
 
 export default function HomeScreen() {
   const { theme } = useTheme();
   const [refreshing, setRefreshing] = useState(false);
   const [activeMode, setActiveMode] = useState<ModeInfo | null>(null);
   const [codes, setCodes] = useState<McpCodeInfo[]>([]);
-  const [lastDevice, setLastDevice] = useState<string>('default');
+  const [lastDevice, setLastDevice] = useState<LastDeviceInfo | null>(null);
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -34,20 +44,36 @@ export default function HomeScreen() {
     try {
       const last = await apiGetLastDevice();
       const deviceId = last.active_psid || 'default';
-      setLastDevice(deviceId);
+      setLastDevice(last);
       const [mode, codesData] = await Promise.all([
         apiGetActiveMode(deviceId),
         apiGetMyCodes(),
       ]);
       setActiveMode(mode);
-      setCodes(codesData);
-    } catch (e) {
-      // ignore for now
+      setCodes(codesData || []);
+    } catch {
+      // ignore temporary dashboard refresh errors
     }
   }, []);
 
   useEffect(() => {
-    load();
+    load().catch(() => {});
+  }, [load]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime((event) => {
+      if ([
+        'active_mode_changed',
+        'mcp_status_updated',
+        'mcp_codes_updated',
+        'route_changed',
+        'chat_message_sent',
+        'ws_open',
+      ].includes(event.type)) {
+        load().catch(() => {});
+      }
+    });
+    return unsubscribe;
   }, [load]);
 
   async function onRefresh() {
@@ -68,6 +94,9 @@ export default function HomeScreen() {
     ],
   };
 
+  const activePsid = lastDevice?.active_psid || 'default';
+  const xiaozhiOnline = !!lastDevice?.xiaozhi_online;
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -76,7 +105,7 @@ export default function HomeScreen() {
         <Animated.View style={animStyle}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>SciG Mode</Text>
-            <Text style={styles.headerSubtitle}>Home Dashboard</Text>
+            <Text style={styles.headerSubtitle}>Home Dashboard Realtime</Text>
           </View>
 
           <View style={styles.card}>
@@ -86,9 +115,16 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>PSID Aktif</Text>
-            <Text style={styles.cardValue}>{lastDevice}</Text>
-            <Text style={styles.cardMeta}>Terakhir dipakai untuk routing</Text>
+            <Text style={styles.cardTitle}>Status Xiaozhi AI</Text>
+            <View style={styles.statusRow}>
+              <Text style={styles.cardValue}>{xiaozhiOnline ? 'Aktif' : 'Belum Aktif'}</Text>
+              <Text style={[styles.statusBadge, xiaozhiOnline ? styles.online : styles.offline]}>
+                {xiaozhiOnline ? 'ONLINE' : 'OFFLINE'}
+              </Text>
+            </View>
+            <Text style={styles.cardMeta}>PSID aktif: {activePsid}</Text>
+            <Text style={styles.cardMeta}>Perangkat fisik terakhir: {lastDevice?.last_physical_device_id || '-'}</Text>
+            <Text style={styles.cardMeta}>Terakhir aktif: {formatDateTime(lastDevice?.xiaozhi_last_seen_at)}</Text>
           </View>
 
           <View style={styles.card}>
@@ -96,15 +132,21 @@ export default function HomeScreen() {
             {codes.length === 0 ? (
               <Text style={styles.muted}>Belum ada code.</Text>
             ) : (
-              codes.map((c, i) => (
-                <View key={i} style={styles.codeRow}>
-                  <Text style={styles.codeText}>{c.code}</Text>
+              codes.map((c) => (
+                <View key={c.id} style={styles.codeRow}>
+                  <Text style={styles.codeText}>{c.code_display || c.code || 'MCP aktif'}</Text>
                   <Text style={[styles.codeStatus, c.is_connected ? styles.online : styles.offline]}>
                     {c.is_connected ? 'Online' : 'Offline'}
                   </Text>
                 </View>
               ))
             )}
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Sinkronisasi</Text>
+            <Text style={styles.cardMeta}>Websocket aktif untuk mode, messages, MCP, dan pair device.</Text>
+            <Text style={styles.cardMeta}>Heartbeat perangkat berjalan realtime setiap 2 detik saat APK aktif.</Text>
           </View>
 
           <View style={{ height: 32 }} />
@@ -159,7 +201,7 @@ const createStyles = (theme: Theme) =>
     cardMeta: {
       fontSize: theme.fontSize.xs,
       color: theme.colors.textSecondary,
-      marginTop: 4,
+      marginTop: 6,
       fontFamily: theme.fonts.body,
     },
     muted: {
@@ -168,12 +210,26 @@ const createStyles = (theme: Theme) =>
       marginTop: 8,
       fontFamily: theme.fonts.body,
     },
+    statusRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.sm,
+    },
+    statusBadge: {
+      marginTop: 10,
+      fontSize: theme.fontSize.xs,
+      fontWeight: '700',
+      fontFamily: theme.fonts.body,
+    },
     codeRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       marginTop: 10,
+      gap: theme.spacing.sm,
     },
     codeText: {
+      flex: 1,
       fontSize: theme.fontSize.sm,
       fontFamily: theme.fonts.mono,
       color: theme.colors.text,

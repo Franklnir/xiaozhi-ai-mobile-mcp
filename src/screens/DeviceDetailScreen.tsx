@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Theme, useTheme } from '../theme/theme';
 import { apiGetDeviceDetail, apiSetDeviceAlias, apiUnpairDevice, DeviceInfo } from '../api/client';
 import { deviceStore } from '../stores/deviceStore';
+import { subscribeRealtime } from '../services/realtimeService';
 
 export default function DeviceDetailScreen() {
   const { theme } = useTheme();
@@ -16,11 +17,11 @@ export default function DeviceDetailScreen() {
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  async function loadDetail() {
+  const loadDetail = useCallback(async () => {
     const detail = await apiGetDeviceDetail(deviceId);
     setDevice(detail);
     setAlias(detail.alias || detail.device_name || '');
-  }
+  }, [deviceId]);
 
   useEffect(() => {
     let active = true;
@@ -40,7 +41,33 @@ export default function DeviceDetailScreen() {
     return () => {
       active = false;
     };
-  }, [deviceId]);
+  }, [deviceId, loadDetail]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime((event) => {
+      if (event.type === 'ws_open') {
+        loadDetail().catch(() => {});
+        return;
+      }
+
+      if (!event.device_id || event.device_id !== deviceId) {
+        return;
+      }
+
+      if (event.type === 'device_unpaired') {
+        Alert.alert('Pair Dihapus', 'Device ini sudah tidak tersambung lagi dari akun Anda.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
+
+      if (event.type === 'device_status_updated' || event.type === 'device_alias_updated' || event.type === 'device_paired') {
+        loadDetail().catch(() => {});
+      }
+    });
+
+    return unsubscribe;
+  }, [deviceId, loadDetail, navigation]);
 
   async function saveAlias() {
     if (!isOnline) {

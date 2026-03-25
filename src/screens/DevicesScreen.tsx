@@ -25,13 +25,14 @@ import {
 import { deviceStore } from '../stores/deviceStore';
 import {
   isTrackingRunning,
-  sendHeartbeat,
+  openAppSettings,
   startTracking,
   stopTracking,
   syncDeviceSnapshot,
   TRACKING_INTERVAL_LABEL,
   TRACKING_INTERVAL_MS,
 } from '../services/deviceService';
+import { subscribeRealtime } from '../services/realtimeService';
 
 function formatDeviceAddress(device?: DeviceInfo | null) {
   return (
@@ -77,6 +78,7 @@ export default function DevicesScreen() {
   const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [bootError, setBootError] = useState('');
   const [pageScrollEnabled, setPageScrollEnabled] = useState(true);
+  const realtimeNoticeRef = useRef('');
 
   const enterAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -109,6 +111,23 @@ export default function DevicesScreen() {
     }
   }, [deviceId]);
 
+  const loadLocationHistory = useCallback(async (targetDeviceId: string) => {
+    if (!targetDeviceId) {
+      setLocationHistory([]);
+      return;
+    }
+
+    setLoadingHistory(true);
+    try {
+      const history = await apiGetDeviceLocations(targetDeviceId, 500);
+      setLocationHistory((history || []).slice().reverse());
+    } catch {
+      setLocationHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     (async () => {
@@ -140,11 +159,15 @@ export default function DevicesScreen() {
   }, [isFocused, loadDevices]);
 
   useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
     const timer = setInterval(() => {
       loadDevices().catch(() => {});
     }, TRACKING_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [loadDevices]);
+  }, [isFocused, loadDevices]);
 
   useEffect(() => {
     if (!selectedMapDeviceId) {
@@ -152,28 +175,17 @@ export default function DevicesScreen() {
       return;
     }
 
-    let active = true;
-    (async () => {
-      setLoadingHistory(true);
-      try {
-        const history = await apiGetDeviceLocations(selectedMapDeviceId, 500);
-        if (!active) return;
-        setLocationHistory((history || []).slice().reverse());
-      } catch {
-        if (active) {
-          setLocationHistory([]);
-        }
-      } finally {
-        if (active) {
-          setLoadingHistory(false);
-        }
-      }
-    })();
+    loadLocationHistory(selectedMapDeviceId).catch(() => {});
+    if (!isFocused) {
+      return;
+    }
 
-    return () => {
-      active = false;
-    };
-  }, [selectedMapDeviceId]);
+    const timer = setInterval(() => {
+      loadLocationHistory(selectedMapDeviceId).catch(() => {});
+    }, TRACKING_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [isFocused, loadLocationHistory, selectedMapDeviceId]);
 
   async function toggleTracking() {
     try {
@@ -195,6 +207,7 @@ export default function DevicesScreen() {
       const res = await apiCreatePairToken(deviceId, deviceToken);
       setPairToken(res.pair_token || '');
       setPairExpires(res.expires_at || '');
+      Alert.alert('QR Siap', 'QR pair berhasil dibuat. Saat user lain tersambung, status akan ikut update realtime.');
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Gagal membuat QR');
     }
@@ -229,13 +242,43 @@ export default function DevicesScreen() {
     }
   }
 
-  async function manualHeartbeat() {
+
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime((event) => {
+      if (
+        event.type === 'ws_open' ||
+        event.type === 'device_status_updated' ||
+        event.type === 'device_alias_updated' ||
+        event.type === 'device_unpaired' ||
+        event.type === 'device_paired'
+      ) {
+        loadDevices().catch(() => {});
+        if (selectedMapDeviceId && (!event.device_id || event.device_id === selectedMapDeviceId)) {
+          loadLocationHistory(selectedMapDeviceId).catch(() => {});
+        }
+      }
+
+      if (
+        event.type === 'device_paired' &&
+        event.device_id &&
+        (event.device_id === deviceId || devices.some((item) => item.device_id === event.device_id))
+      ) {
+        const noticeKey = `paired:${event.device_id}:${String(event.timestamp || '')}`;
+        if (realtimeNoticeRef.current !== noticeKey) {
+          realtimeNoticeRef.current = noticeKey;
+          Alert.alert('Tersambung', 'Selamat, perangkat berhasil tersambung realtime.');
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [deviceId, devices, loadDevices, loadLocationHistory, selectedMapDeviceId]);
+
+  async function openBackgroundSettings() {
     try {
-      await sendHeartbeat();
-      await loadDevices();
-      Alert.alert('OK', 'Data perangkat diperbarui');
+      await openAppSettings();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Gagal update data');
+      Alert.alert('Error', e.message || 'Gagal membuka pengaturan aplikasi');
     }
   }
 
@@ -393,7 +436,7 @@ export default function DevicesScreen() {
             </Text>
             <View style={styles.infoBanner}>
               <Text style={styles.infoBannerText}>
-                Izin background sekarang dipisah ke menu Akun & Pengaturan supaya flow izin lebih stabil dan tidak bikin force close.
+                Lokasi, data HP, dan status online sekarang jalan otomatis realtime tiap {TRACKING_INTERVAL_LABEL}. Untuk mode latar belakang, buka pengaturan aplikasi lalu izinkan aktivitas/background battery sesuai merek HP Anda.
               </Text>
             </View>
             <View style={styles.btnRow}>
@@ -402,8 +445,8 @@ export default function DevicesScreen() {
                   {trackingEnabled ? 'Matikan Monitor' : 'Aktifkan Monitor'}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={manualHeartbeat}>
-                <Text style={styles.btnText}>Sync Now</Text>
+              <TouchableOpacity style={styles.primaryBtn} onPress={openBackgroundSettings}>
+                <Text style={styles.btnText}>Buka Pengaturan</Text>
               </TouchableOpacity>
             </View>
           </View>

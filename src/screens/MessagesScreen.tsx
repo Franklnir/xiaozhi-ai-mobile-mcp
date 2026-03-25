@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Theme, useTheme } from '../theme/theme';
 import { apiGetLastDevice, apiGetThreads, apiGetMessages, ThreadInfo, MessageInfo } from '../api/client';
+import { subscribeRealtime } from '../services/realtimeService';
 
 export default function MessagesScreen() {
   const { theme } = useTheme();
@@ -32,33 +33,59 @@ export default function MessagesScreen() {
 
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  const loadThreads = useCallback(async () => {
+  const loadMessagesForThread = useCallback(async (psid: string, threadId: number | null) => {
+    if (!threadId) {
+      setMessages([]);
+      return;
+    }
+    const msgs = await apiGetMessages(psid, threadId);
+    setMessages((msgs || []).filter((m) => m.role === 'user' || m.role === 'assistant'));
+  }, []);
+
+  const loadThreadsAndMessages = useCallback(async (preferredThreadId?: number | null) => {
     const last = await apiGetLastDevice();
     const psid = last.active_psid || 'default';
     setDeviceId(psid);
     const data = await apiGetThreads(psid);
-    setThreads(data);
-    if (data.length > 0 && !activeThread) {
-      setActiveThread(data[0].id);
-      const msgs = await apiGetMessages(psid, data[0].id);
-      setMessages(msgs.filter((m) => m.role === 'user' || m.role === 'assistant'));
-    }
-  }, [activeThread]);
+    setThreads(data || []);
+
+    const nextThreadId = preferredThreadId
+      ?? (activeThread && data.some((thread) => thread.id === activeThread) ? activeThread : null)
+      ?? data[0]?.id
+      ?? null;
+
+    setActiveThread(nextThreadId);
+    await loadMessagesForThread(psid, nextThreadId);
+  }, [activeThread, loadMessagesForThread]);
 
   useEffect(() => {
-    loadThreads();
-  }, [loadThreads]);
+    loadThreadsAndMessages().catch(() => {});
+  }, [loadThreadsAndMessages]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeRealtime((event) => {
+      if (event.type === 'ws_open' || event.type === 'route_changed' || event.type === 'chat_created' || event.type === 'chat_deleted') {
+        loadThreadsAndMessages().catch(() => {});
+        return;
+      }
+      if (event.type === 'chat_message_sent') {
+        if (!event.device_id || event.device_id === deviceId) {
+          loadThreadsAndMessages(event.thread_id || activeThread).catch(() => {});
+        }
+      }
+    });
+    return unsubscribe;
+  }, [activeThread, deviceId, loadThreadsAndMessages]);
 
   async function onRefresh() {
     setRefreshing(true);
-    await loadThreads();
+    await loadThreadsAndMessages();
     setRefreshing(false);
   }
 
   async function selectThread(threadId: number) {
     setActiveThread(threadId);
-    const msgs = await apiGetMessages(deviceId, threadId);
-    setMessages(msgs.filter((m) => m.role === 'user' || m.role === 'assistant'));
+    await loadMessagesForThread(deviceId, threadId);
   }
 
   const animStyle = {
@@ -86,7 +113,7 @@ export default function MessagesScreen() {
             {threads.length === 0 ? (
               <Text style={styles.muted}>Belum ada thread.</Text>
             ) : (
-              threads.slice(0, 20).map((t) => (
+              threads.slice(0, 30).map((t) => (
                 <TouchableOpacity
                   key={t.id}
                   style={[styles.threadItem, activeThread === t.id && styles.threadItemActive]}
@@ -104,8 +131,8 @@ export default function MessagesScreen() {
             {messages.length === 0 ? (
               <Text style={styles.muted}>Belum ada pesan.</Text>
             ) : (
-              messages.map((m, idx) => (
-                <View key={idx} style={[styles.msgBubble, m.role === 'user' ? styles.msgUser : styles.msgAssistant]}>
+              messages.map((m) => (
+                <View key={m.id} style={[styles.msgBubble, m.role === 'user' ? styles.msgUser : styles.msgAssistant]}>
                   <Text style={styles.msgRole}>{m.role === 'user' ? 'User' : 'Xiaozhi'}</Text>
                   <Text style={styles.msgContent}>{m.content}</Text>
                   <Text style={styles.msgTime}>{m.created_at}</Text>

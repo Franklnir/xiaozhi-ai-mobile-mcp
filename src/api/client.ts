@@ -283,6 +283,7 @@ export interface DeviceRegisterResult {
 export interface McpCodeInfo {
   id: number;
   code: string;
+  code_display?: string;
   has_token?: number;
   is_connected?: number;
   created_at?: string;
@@ -415,7 +416,16 @@ export async function apiGetMessages(
   return res.data;
 }
 
-export async function apiGetLastDevice() {
+export interface LastDeviceInfo {
+  last_physical_device_id: string;
+  last_effective_device_id: string;
+  active_psid: string;
+  updated_at?: string;
+  xiaozhi_online?: boolean;
+  xiaozhi_last_seen_at?: string;
+}
+
+export async function apiGetLastDevice(): Promise<LastDeviceInfo> {
   const api = await getApi();
   const res = await api.get('/api/last-device');
   return res.data;
@@ -462,7 +472,16 @@ export async function apiDeviceHeartbeat(payload: {
   ram_total?: number;
   storage_used?: number;
   storage_total?: number;
-}): Promise<{ ok: boolean; device_id: string }> {
+}): Promise<{
+  ok: boolean;
+  device_id: string;
+  address?: {
+    street?: string;
+    area?: string;
+    city?: string;
+    full?: string;
+  };
+}> {
   const api = await getApi();
   const res = await api.post('/api/devices/heartbeat', payload);
   return res.data;
